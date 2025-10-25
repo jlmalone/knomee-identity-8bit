@@ -244,6 +244,9 @@ fun OraclePanelScreen(onBack: () -> Unit) {
 @Composable
 fun SettingsScreen(
     isConnected: Boolean,
+    currentAddress: String?,
+    blockNumber: java.math.BigInteger?,
+    chainId: java.math.BigInteger?,
     onConnectionToggle: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -274,10 +277,19 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Contract addresses
-        SettingRow("Registry:", "0x...")
-        SettingRow("Consensus:", "0x...")
-        SettingRow("Governance:", "0x...")
+        // Blockchain info
+        SettingRow("Chain ID:", chainId?.toString() ?: "Not connected")
+        SettingRow("Block:", blockNumber?.toString() ?: "N/A")
+        if (currentAddress != null) {
+            SettingRow("Wallet:", "${currentAddress.take(6)}...${currentAddress.takeLast(4)}")
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Contract addresses (placeholder - will be set after deployment)
+        SettingRow("Registry:", "Not deployed")
+        SettingRow("Consensus:", "Not deployed")
+        SettingRow("Governance:", "Not deployed")
 
         Spacer(modifier = Modifier.height(24.dp))
 

@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import java.math.BigInteger
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
@@ -30,9 +31,20 @@ enum class Screen {
 
 @Composable
 fun MainScreen() {
+    val viewModel = remember { com.knomee.identity.viewmodel.IdentityViewModel() }
     var currentScreen by remember { mutableStateOf(Screen.TITLE) }
-    var currentTier by remember { mutableStateOf("GREYGHOST") }
-    var isConnected by remember { mutableStateOf(false) }
+
+    // Use blockchain state from ViewModel
+    val currentTier = viewModel.currentTier
+    val isConnected = viewModel.isConnected
+    val currentAddress = viewModel.currentAddress
+
+    // Cleanup on dispose
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.onDispose()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -76,7 +88,16 @@ fun MainScreen() {
                 )
                 Screen.SETTINGS -> SettingsScreen(
                     isConnected = isConnected,
-                    onConnectionToggle = { isConnected = !isConnected },
+                    currentAddress = currentAddress,
+                    blockNumber = viewModel.blockNumber,
+                    chainId = viewModel.chainId,
+                    onConnectionToggle = {
+                        if (isConnected) {
+                            viewModel.disconnect()
+                        } else {
+                            viewModel.connect(useTestAccount = true)
+                        }
+                    },
                     onBack = { currentScreen = Screen.TITLE }
                 )
             }
