@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "./IdentityToken.sol";
 
 /**
  * @title IdentityRegistry
@@ -66,6 +67,9 @@ contract IdentityRegistry is Ownable {
 
     /// @notice Address authorized to modify state (IdentityConsensus contract)
     address public consensusContract;
+
+    /// @notice Identity Token (soul-bound NFT) contract
+    IdentityToken public identityToken;
 
     // ============ Events ============
 
@@ -134,6 +138,16 @@ contract IdentityRegistry is Ownable {
     }
 
     /**
+     * @notice Set the Identity Token contract address
+     * @param _identityToken Address of IdentityToken contract
+     * @dev Only callable by owner during initial setup
+     */
+    function setIdentityToken(address _identityToken) external onlyOwner {
+        require(_identityToken != address(0), "Invalid address");
+        identityToken = IdentityToken(_identityToken);
+    }
+
+    /**
      * @notice Grant Oracle status (admin-controlled in Phase 1)
      * @param addr Address to grant Oracle status
      * @dev Future: Will be earned through meritocracy in Phase 3
@@ -189,6 +203,11 @@ contract IdentityRegistry is Ownable {
             linkedAt: block.timestamp
         }));
 
+        // Mint Identity Token (soul-bound NFT)
+        if (address(identityToken) != address(0)) {
+            identityToken.mintLinkedID(addr);
+        }
+
         emit IdentityVerified(addr, IdentityTier.LinkedID, block.timestamp);
         emit IdentityLinked(addr, primary, platform, justification);
     }
@@ -203,6 +222,11 @@ contract IdentityRegistry is Ownable {
 
         identity.tier = IdentityTier.PrimaryID;
         identity.verifiedAt = block.timestamp;
+
+        // Mint Identity Token (soul-bound NFT)
+        if (address(identityToken) != address(0)) {
+            identityToken.mintPrimaryID(addr);
+        }
 
         emit IdentityVerified(addr, IdentityTier.PrimaryID, block.timestamp);
     }

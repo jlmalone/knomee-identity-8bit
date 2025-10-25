@@ -64,6 +64,9 @@ contract DeployScript is Script {
         registry.setConsensusContract(address(consensus));
         console.log("Consensus contract linked to registry");
 
+        registry.setIdentityToken(address(identityToken));
+        console.log("IdentityToken linked to registry");
+
         identityToken.setIdentityRegistry(address(registry));
         console.log("IdentityToken configured with registry");
 

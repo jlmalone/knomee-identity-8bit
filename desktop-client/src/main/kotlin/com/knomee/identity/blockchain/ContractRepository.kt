@@ -22,7 +22,9 @@ class ContractRepository(
     private val web3j: Web3j,
     private val registryAddress: String,
     private val consensusAddress: String,
-    private val governanceAddress: String
+    private val governanceAddress: String,
+    private val identityTokenAddress: String? = null,
+    private val knomeeTokenAddress: String? = null
 ) {
 
     /**
@@ -228,6 +230,96 @@ class ContractRepository(
             return if (result.isNotEmpty()) (result[0] as Uint).value else null
         } catch (e: Exception) {
             return null
+        }
+    }
+
+    /**
+     * Get KNOW token balance for an address
+     */
+    suspend fun getKnomeeTokenBalance(address: String): BigInteger? = withContext(Dispatchers.IO) {
+        if (knomeeTokenAddress == null) return@withContext null
+
+        try {
+            val function = Function(
+                "balanceOf",
+                listOf(Address(160, address)),
+                listOf(object : TypeReference<Uint256>() {})
+            )
+
+            val encodedFunction = FunctionEncoder.encode(function)
+            val response = web3j.ethCall(
+                Transaction.createEthCallTransaction(address, knomeeTokenAddress, encodedFunction),
+                DefaultBlockParameterName.LATEST
+            ).send()
+
+            if (response.hasError()) return@withContext null
+
+            val result = FunctionReturnDecoder.decode(response.value, function.outputParameters)
+            if (result.isNotEmpty()) (result[0] as Uint).value else null
+        } catch (e: Exception) {
+            println("Exception getting KNOW balance: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Check if address owns an Identity Token (IDT)
+     */
+    suspend fun hasIdentityToken(address: String): Boolean = withContext(Dispatchers.IO) {
+        if (identityTokenAddress == null) return@withContext false
+
+        try {
+            val function = Function(
+                "balanceOf",
+                listOf(Address(160, address)),
+                listOf(object : TypeReference<Uint256>() {})
+            )
+
+            val encodedFunction = FunctionEncoder.encode(function)
+            val response = web3j.ethCall(
+                Transaction.createEthCallTransaction(address, identityTokenAddress, encodedFunction),
+                DefaultBlockParameterName.LATEST
+            ).send()
+
+            if (response.hasError()) return@withContext false
+
+            val result = FunctionReturnDecoder.decode(response.value, function.outputParameters)
+            if (result.isNotEmpty()) {
+                val balance = (result[0] as Uint).value
+                balance > BigInteger.ZERO
+            } else false
+        } catch (e: Exception) {
+            println("Exception checking IDT ownership: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Get voting weight for an address (Identity Tier × KNOW Stake)
+     */
+    suspend fun getVotingWeight(address: String): BigInteger? = withContext(Dispatchers.IO) {
+        if (identityTokenAddress == null) return@withContext null
+
+        try {
+            val function = Function(
+                "getVotingWeight",
+                listOf(Address(160, address)),
+                listOf(object : TypeReference<Uint256>() {})
+            )
+
+            val encodedFunction = FunctionEncoder.encode(function)
+            val response = web3j.ethCall(
+                Transaction.createEthCallTransaction(address, identityTokenAddress, encodedFunction),
+                DefaultBlockParameterName.LATEST
+            ).send()
+
+            if (response.hasError()) return@withContext null
+
+            val result = FunctionReturnDecoder.decode(response.value, function.outputParameters)
+            if (result.isNotEmpty()) (result[0] as Uint).value else null
+        } catch (e: Exception) {
+            println("Exception getting voting weight: ${e.message}")
+            null
         }
     }
 }

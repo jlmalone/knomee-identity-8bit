@@ -57,6 +57,15 @@ class IdentityViewModel {
     var isTransactionPending by mutableStateOf(false)
         private set
 
+    var knomeeTokenBalance by mutableStateOf<BigInteger?>(null)
+        private set
+
+    var hasIdentityToken by mutableStateOf(false)
+        private set
+
+    var votingWeight by mutableStateOf<BigInteger?>(null)
+        private set
+
     /**
      * Connect to Ethereum network (Anvil local testnet)
      */
@@ -116,7 +125,9 @@ class IdentityViewModel {
     fun setContractAddresses(
         governance: String,
         registry: String,
-        consensus: String
+        consensus: String,
+        identityToken: String? = null,
+        knomeeToken: String? = null
     ) {
         web3Service?.let { service ->
             service.governanceAddress = governance
@@ -129,7 +140,9 @@ class IdentityViewModel {
                 web3j = web3j,
                 registryAddress = registry,
                 consensusAddress = consensus,
-                governanceAddress = governance
+                governanceAddress = governance,
+                identityTokenAddress = identityToken,
+                knomeeTokenAddress = knomeeToken
             )
 
             // Initialize transaction service
@@ -147,6 +160,7 @@ class IdentityViewModel {
             loadIdentityData()
             loadGovernanceParams()
             loadActiveClaimsFromEvents()
+            loadTokenBalances()
         }
     }
 
@@ -224,8 +238,30 @@ class IdentityViewModel {
                 blockNumber = web3Service?.getBlockNumber()
                 loadIdentityData()
                 loadActiveClaims()
+                loadTokenBalances()
             } catch (e: Exception) {
                 errorMessage = "Refresh failed: ${e.message}"
+            }
+        }
+    }
+
+    /**
+     * Load token balances for current address
+     */
+    fun loadTokenBalances() {
+        val address = currentAddress ?: return
+        viewModelScope.launch {
+            try {
+                knomeeTokenBalance = contractRepository?.getKnomeeTokenBalance(address)
+                hasIdentityToken = contractRepository?.hasIdentityToken(address) ?: false
+                votingWeight = contractRepository?.getVotingWeight(address)
+
+                println("Token balances loaded:")
+                println("  KNOW: ${knomeeTokenBalance ?: "N/A"}")
+                println("  Has IDT: $hasIdentityToken")
+                println("  Voting Weight: ${votingWeight ?: "N/A"}")
+            } catch (e: Exception) {
+                errorMessage = "Failed to load token balances: ${e.message}"
             }
         }
     }
