@@ -103,7 +103,13 @@ fun StatRow(label: String, value: String) {
 // ============ Claim Verification Screen ============
 
 @Composable
-fun ClaimVerificationScreen(onBack: () -> Unit) {
+fun ClaimVerificationScreen(
+    viewModel: com.knomee.identity.viewmodel.IdentityViewModel,
+    onBack: () -> Unit
+) {
+    var showPrimaryDialog by remember { mutableStateOf(false) }
+    var showLinkDialog by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -121,10 +127,37 @@ fun ClaimVerificationScreen(onBack: () -> Unit) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        // Transaction status
+        viewModel.transactionStatus?.let { status ->
+            Box(
+                modifier = Modifier
+                    .width(500.dp)
+                    .background(RetroColors.Success.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                    .border(2.dp, RetroColors.Success, RoundedCornerShape(8.dp))
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = status,
+                    style = RetroTypography.body,
+                    color = RetroColors.Success,
+                    textAlign = TextAlign.Center
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         // Claim type buttons
-        RetroMenuButton("REQUEST PRIMARY ID", onClick = { /* TODO */ })
+        RetroMenuButton(
+            text = "REQUEST PRIMARY ID",
+            onClick = { showPrimaryDialog = true },
+            enabled = !viewModel.isTransactionPending
+        )
         Spacer(modifier = Modifier.height(16.dp))
-        RetroMenuButton("LINK SECONDARY ACCOUNT", onClick = { /* TODO */ })
+        RetroMenuButton(
+            text = "LINK SECONDARY ACCOUNT",
+            onClick = { showLinkDialog = true },
+            enabled = !viewModel.isTransactionPending
+        )
         Spacer(modifier = Modifier.height(16.dp))
         RetroMenuButton("VIEW MY CLAIMS", onClick = { /* TODO */ })
 
@@ -141,6 +174,25 @@ fun ClaimVerificationScreen(onBack: () -> Unit) {
         Spacer(modifier = Modifier.height(16.dp))
 
         RetroBackButton(onBack)
+    }
+
+    // Dialogs
+    if (showPrimaryDialog) {
+        RequestPrimaryIDDialog(
+            onSubmit = { justification, stake ->
+                viewModel.requestPrimaryID(justification, stake)
+            },
+            onDismiss = { showPrimaryDialog = false }
+        )
+    }
+
+    if (showLinkDialog) {
+        LinkSecondaryAccountDialog(
+            onSubmit = { primary, platform, justification, stake ->
+                viewModel.linkSecondaryAccount(primary, platform, justification, stake)
+            },
+            onDismiss = { showLinkDialog = false }
+        )
     }
 }
 

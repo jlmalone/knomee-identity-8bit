@@ -17,6 +17,7 @@ class IdentityViewModel {
     // Web3 Service
     private var web3Service: Web3Service? = null
     private var contractRepository: ContractRepository? = null
+    private var transactionService: TransactionService? = null
 
     // Coroutine scope for async operations
     private val viewModelScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -47,6 +48,12 @@ class IdentityViewModel {
         private set
 
     var errorMessage by mutableStateOf<String?>(null)
+        private set
+
+    var transactionStatus by mutableStateOf<String?>(null)
+        private set
+
+    var isTransactionPending by mutableStateOf(false)
         private set
 
     /**
@@ -124,6 +131,14 @@ class IdentityViewModel {
                 governanceAddress = governance
             )
 
+            // Initialize transaction service
+            web3Service?.let { service ->
+                if (service.getWalletAddress() != null) {
+                    val credentials = org.web3j.crypto.Credentials.create(Web3Service.ANVIL_TEST_PRIVATE_KEY)
+                    transactionService = TransactionService(web3j, credentials)
+                }
+            }
+
             // Load initial data
             loadIdentityData()
             loadGovernanceParams()
@@ -184,6 +199,143 @@ class IdentityViewModel {
                 loadActiveClaims()
             } catch (e: Exception) {
                 errorMessage = "Refresh failed: ${e.message}"
+            }
+        }
+    }
+
+    /**
+     * Submit primary ID verification request
+     */
+    fun requestPrimaryID(justification: String, stakeEth: Double) {
+        val consensusAddress = web3Service?.consensusAddress
+        if (consensusAddress.isNullOrEmpty()) {
+            errorMessage = "Consensus contract not configured"
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                isTransactionPending = true
+                transactionStatus = "Submitting primary ID request..."
+
+                val stakeWei = (stakeEth * 1e18).toBigDecimal().toBigInteger()
+                val result = transactionService?.requestPrimaryVerification(
+                    consensusAddress,
+                    justification,
+                    stakeWei
+                )
+
+                when (result) {
+                    is TransactionResult.Success -> {
+                        transactionStatus = "Success! TX: ${result.txHash.take(10)}..."
+                        loadIdentityData()
+                        loadActiveClaims()
+                    }
+                    is TransactionResult.Error -> {
+                        errorMessage = result.message
+                        transactionStatus = null
+                    }
+                    else -> {
+                        transactionStatus = "Transaction pending..."
+                    }
+                }
+            } catch (e: Exception) {
+                errorMessage = "Transaction failed: ${e.message}"
+                transactionStatus = null
+            } finally {
+                isTransactionPending = false
+            }
+        }
+    }
+
+    /**
+     * Link secondary account to primary
+     */
+    fun linkSecondaryAccount(
+        primaryAddress: String,
+        platform: String,
+        justification: String,
+        stakeEth: Double
+    ) {
+        val consensusAddress = web3Service?.consensusAddress
+        if (consensusAddress.isNullOrEmpty()) {
+            errorMessage = "Consensus contract not configured"
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                isTransactionPending = true
+                transactionStatus = "Linking secondary account..."
+
+                val stakeWei = (stakeEth * 1e18).toBigDecimal().toBigInteger()
+                val result = transactionService?.requestLinkToPrimary(
+                    consensusAddress,
+                    primaryAddress,
+                    platform,
+                    justification,
+                    stakeWei
+                )
+
+                when (result) {
+                    is TransactionResult.Success -> {
+                        transactionStatus = "Success! TX: ${result.txHash.take(10)}..."
+                        loadIdentityData()
+                        loadActiveClaims()
+                    }
+                    is TransactionResult.Error -> {
+                        errorMessage = result.message
+                        transactionStatus = null
+                    }
+                    else -> {
+                        transactionStatus = "Transaction pending..."
+                    }
+                }
+            } catch (e: Exception) {
+                errorMessage = "Transaction failed: ${e.message}"
+                transactionStatus = null
+            } finally {
+                isTransactionPending = false
+            }
+        }
+    }
+
+    /**
+     * Vote in support of a claim
+     */
+    fun vouchFor(claimId: BigInteger, stakeEth: Double) {
+        val consensusAddress = web3Service?.consensusAddress
+        if (consensusAddress.isNullOrEmpty()) {
+            errorMessage = "Consensus contract not configured"
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                isTransactionPending = true
+                transactionStatus = "Submitting vote..."
+
+                val stakeWei = (stakeEth * 1e18).toBigDecimal().toBigInteger()
+                val result = transactionService?.vouchFor(consensusAddress, claimId, stakeWei)
+
+                when (result) {
+                    is TransactionResult.Success -> {
+                        transactionStatus = "Vote submitted! TX: ${result.txHash.take(10)}..."
+                        loadActiveClaims()
+                    }
+                    is TransactionResult.Error -> {
+                        errorMessage = result.message
+                        transactionStatus = null
+                    }
+                    else -> {
+                        transactionStatus = "Transaction pending..."
+                    }
+                }
+            } catch (e: Exception) {
+                errorMessage = "Vote failed: ${e.message}"
+                transactionStatus = null
+            } finally {
+                isTransactionPending = false
             }
         }
     }

@@ -78,6 +78,7 @@ fun MainScreen() {
                     onBack = { currentScreen = Screen.TITLE }
                 )
                 Screen.CLAIM_VERIFICATION -> ClaimVerificationScreen(
+                    viewModel = viewModel,
                     onBack = { currentScreen = Screen.TITLE }
                 )
                 Screen.VOUCH_SYSTEM -> VouchSystemScreen(
@@ -96,6 +97,12 @@ fun MainScreen() {
                             viewModel.disconnect()
                         } else {
                             viewModel.connect(useTestAccount = true)
+                            // Set contract addresses from .env
+                            viewModel.setContractAddresses(
+                                governance = "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+                                registry = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+                                consensus = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+                            )
                         }
                     },
                     onBack = { currentScreen = Screen.TITLE }
@@ -283,16 +290,19 @@ fun AnimatedTitle() {
 }
 
 @Composable
-fun RetroMenuButton(text: String, onClick: () -> Unit) {
+fun RetroMenuButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier
             .width(400.dp)
             .height(48.dp)
             .border(3.dp, RetroColors.BorderColor, RoundedCornerShape(4.dp)),
         colors = ButtonDefaults.buttonColors(
             containerColor = RetroColors.WindowBackground,
-            contentColor = RetroColors.NESWhite
+            contentColor = RetroColors.NESWhite,
+            disabledContainerColor = RetroColors.NESDarkGray,
+            disabledContentColor = RetroColors.NESGray
         ),
         shape = RoundedCornerShape(4.dp)
     ) {
