@@ -368,6 +368,46 @@ class IdentityViewModel {
     }
 
     /**
+     * Vote against a claim
+     */
+    fun vouchAgainst(claimId: BigInteger, stakeEth: Double) {
+        val consensusAddress = web3Service?.consensusAddress
+        if (consensusAddress.isNullOrEmpty()) {
+            errorMessage = "Consensus contract not configured"
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                isTransactionPending = true
+                transactionStatus = "Submitting opposition vote..."
+
+                val stakeWei = (stakeEth * 1e18).toBigDecimal().toBigInteger()
+                val result = transactionService?.vouchAgainst(consensusAddress, claimId, stakeWei)
+
+                when (result) {
+                    is TransactionResult.Success -> {
+                        transactionStatus = "Opposition vote submitted! TX: ${result.txHash.take(10)}..."
+                        loadActiveClaims()
+                    }
+                    is TransactionResult.Error -> {
+                        errorMessage = result.message
+                        transactionStatus = null
+                    }
+                    else -> {
+                        transactionStatus = "Transaction pending..."
+                    }
+                }
+            } catch (e: Exception) {
+                errorMessage = "Opposition vote failed: ${e.message}"
+                transactionStatus = null
+            } finally {
+                isTransactionPending = false
+            }
+        }
+    }
+
+    /**
      * Cleanup when ViewModel is disposed
      */
     fun onDispose() {

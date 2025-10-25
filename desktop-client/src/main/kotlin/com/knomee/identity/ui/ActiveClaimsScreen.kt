@@ -74,7 +74,7 @@ fun ActiveClaimsScreen(
                         claim = claim,
                         onClick = { selectedClaim = claim },
                         onVoteFor = { viewModel.vouchFor(claim.claimId, 0.01) },
-                        onVoteAgainst = { /* TODO */ },
+                        onVoteAgainst = { viewModel.vouchAgainst(claim.claimId, 0.01) },
                         isPending = viewModel.isTransactionPending
                     )
                 }
@@ -109,7 +109,7 @@ fun ActiveClaimsScreen(
                 selectedClaim = null
             },
             onVoteAgainst = {
-                // TODO: Implement vouchAgainst
+                viewModel.vouchAgainst(claim.claimId, 0.01)
                 selectedClaim = null
             }
         )
