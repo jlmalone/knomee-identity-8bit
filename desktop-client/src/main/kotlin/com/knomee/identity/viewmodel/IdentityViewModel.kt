@@ -18,6 +18,7 @@ class IdentityViewModel {
     private var web3Service: Web3Service? = null
     private var contractRepository: ContractRepository? = null
     private var transactionService: TransactionService? = null
+    private var eventListener: EventListener? = null
 
     // Coroutine scope for async operations
     private val viewModelScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -139,9 +140,13 @@ class IdentityViewModel {
                 }
             }
 
+            // Initialize event listener
+            eventListener = EventListener(web3j, consensus)
+
             // Load initial data
             loadIdentityData()
             loadGovernanceParams()
+            loadActiveClaimsFromEvents()
         }
     }
 
@@ -176,16 +181,38 @@ class IdentityViewModel {
     }
 
     /**
+     * Load active claims from blockchain events
+     */
+    private fun loadActiveClaimsFromEvents() {
+        viewModelScope.launch {
+            try {
+                // Get recent claim IDs from events
+                val claimIds = eventListener?.getAllActiveClaims(lookbackBlocks = 10000) ?: emptyList()
+
+                // Fetch full claim data for each ID
+                val claims = mutableListOf<ClaimData>()
+                claimIds.forEach { claimId ->
+                    contractRepository?.getClaim(claimId)?.let { claim ->
+                        if (claim.isActive()) {
+                            claims.add(claim)
+                        }
+                    }
+                }
+
+                activeClaims = claims
+                println("Loaded ${claims.size} active claims")
+            } catch (e: Exception) {
+                errorMessage = "Failed to load claims: ${e.message}"
+                println("Error loading claims: ${e.message}")
+            }
+        }
+    }
+
+    /**
      * Load active claims
      */
     fun loadActiveClaims() {
-        viewModelScope.launch {
-            try {
-                activeClaims = contractRepository?.getActiveClaims() ?: emptyList()
-            } catch (e: Exception) {
-                errorMessage = "Failed to load claims: ${e.message}"
-            }
-        }
+        loadActiveClaimsFromEvents()
     }
 
     /**

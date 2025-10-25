@@ -110,12 +110,74 @@ class ContractRepository(
     }
 
     /**
+     * Get a specific claim by ID
+     */
+    suspend fun getClaim(claimId: BigInteger): ClaimData? = withContext(Dispatchers.IO) {
+        try {
+            val function = Function(
+                "getClaim",
+                listOf(Uint256(claimId)),
+                listOf(
+                    object : TypeReference<Address>() {},        // claimant
+                    object : TypeReference<Uint8>() {},          // claimType
+                    object : TypeReference<Uint8>() {},          // status
+                    object : TypeReference<Address>() {},        // targetAddress
+                    object : TypeReference<Utf8String>() {},     // platform
+                    object : TypeReference<Utf8String>() {},     // justification
+                    object : TypeReference<Uint256>() {},        // stakeAmount
+                    object : TypeReference<Uint256>() {},        // vouchesFor
+                    object : TypeReference<Uint256>() {},        // vouchesAgainst
+                    object : TypeReference<Uint256>() {},        // weightedFor
+                    object : TypeReference<Uint256>() {},        // weightedAgainst
+                    object : TypeReference<Uint256>() {},        // createdAt
+                    object : TypeReference<Uint256>() {}         // expiresAt
+                )
+            )
+
+            val encodedFunction = FunctionEncoder.encode(function)
+            val response = web3j.ethCall(
+                org.web3j.protocol.core.methods.request.Transaction.createEthCallTransaction(
+                    null, consensusAddress, encodedFunction
+                ),
+                org.web3j.protocol.core.DefaultBlockParameterName.LATEST
+            ).send()
+
+            if (response.hasError()) {
+                println("Error calling getClaim: ${response.error.message}")
+                return@withContext null
+            }
+
+            val result = FunctionReturnDecoder.decode(response.value, function.outputParameters)
+            if (result.size < 13) return@withContext null
+
+            ClaimData(
+                claimId = claimId,
+                claimant = (result[0] as Address).value,
+                claimType = ClaimType.fromValue((result[1] as org.web3j.abi.datatypes.generated.Uint8).value.toInt()),
+                status = ClaimStatus.fromValue((result[2] as org.web3j.abi.datatypes.generated.Uint8).value.toInt()),
+                targetAddress = (result[3] as Address).value.takeIf { it != "0x0000000000000000000000000000000000000000" },
+                platform = (result[4] as Utf8String).value.takeIf { it.isNotBlank() },
+                justification = (result[5] as Utf8String).value,
+                stakeAmount = (result[6] as Uint256).value,
+                vouchesFor = (result[7] as Uint256).value,
+                vouchesAgainst = (result[8] as Uint256).value,
+                weightedFor = (result[9] as Uint256).value,
+                weightedAgainst = (result[10] as Uint256).value,
+                createdAt = (result[11] as Uint256).value,
+                expiresAt = (result[12] as Uint256).value
+            )
+        } catch (e: Exception) {
+            println("Exception getting claim: ${e.message}")
+            null
+        }
+    }
+
+    /**
      * Get active claims from IdentityConsensus
      * Note: This requires iterating through claim IDs or using events
      */
     suspend fun getActiveClaims(): List<ClaimData> = withContext(Dispatchers.IO) {
-        // TODO: Implement by querying recent ClaimCreated events
-        // For now, return empty list
+        // This method is now called from ViewModel using event listener
         emptyList()
     }
 

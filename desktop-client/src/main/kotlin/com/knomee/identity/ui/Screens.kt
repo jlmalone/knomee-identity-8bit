@@ -199,7 +199,11 @@ fun ClaimVerificationScreen(
 // ============ Vouch System Screen ============
 
 @Composable
-fun VouchSystemScreen(onBack: () -> Unit) {
+fun VouchSystemScreen(
+    viewModel: com.knomee.identity.viewmodel.IdentityViewModel,
+    onViewClaims: () -> Unit,
+    onBack: () -> Unit
+) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -217,7 +221,32 @@ fun VouchSystemScreen(onBack: () -> Unit) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        RetroMenuButton("VIEW ACTIVE CLAIMS", onClick = { /* TODO */ })
+        // Quick stats
+        Box(
+            modifier = Modifier
+                .width(500.dp)
+                .background(RetroColors.CardBackground, RoundedCornerShape(8.dp))
+                .border(2.dp, RetroColors.BorderColor, RoundedCornerShape(8.dp))
+                .padding(16.dp)
+        ) {
+            Column {
+                Text(
+                    text = "ACTIVE CLAIMS: ${viewModel.activeClaims.size}",
+                    style = RetroTypography.body,
+                    color = RetroColors.BorderColor
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Your voting weight: ${if (viewModel.identityData?.isPrimary() == true) "1" else "0"}",
+                    style = RetroTypography.caption,
+                    color = RetroColors.NESGray
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        RetroMenuButton("VIEW ACTIVE CLAIMS", onClick = onViewClaims)
         Spacer(modifier = Modifier.height(16.dp))
         RetroMenuButton("MY VOUCHES", onClick = { /* TODO */ })
         Spacer(modifier = Modifier.height(16.dp))
