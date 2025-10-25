@@ -4,8 +4,11 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./IdentityRegistry.sol";
 import "./GovernanceParameters.sol";
+import "./IdentityToken.sol";
+import "./KnomeeToken.sol";
 
 /**
  * @title IdentityConsensus
@@ -17,16 +20,21 @@ import "./GovernanceParameters.sol";
  * - NewPrimary (67% threshold): Claim unique human status
  * - DuplicateFlag (80% threshold): Challenge Sybil attack
  *
- * Economic Mechanics:
- * - Staking: 0.01 ETH base, 3x for Primary, 10x for Duplicate
- * - Slashing: 10%-100% based on claim type and outcome
- * - Rewards: Correct vouchers split slashed stakes
+ * Two-Token Economic Model:
+ * - Voting Requirement: Must hold IdentityToken (IDT) with voting weight > 0
+ * - Staking Requirement: Must stake KNOW tokens (10-50 KNOW based on claim type)
+ * - Vote Weight = Identity Weight × KNOW Stake Amount
+ * - Slashing: KNOW tokens burned for incorrect votes (10%-100%)
+ * - Rewards: KNOW tokens minted for correct votes (proportional to stake)
+ * - Gas Fees: Still paid in ETH (blockchain requirement)
  */
 contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
     // ============ Dependencies ============
 
     IdentityRegistry public registry;
     GovernanceParameters public params;
+    IdentityToken public identityToken;
+    KnomeeToken public knomeeToken;
 
     // ============ Enums ============
 
@@ -57,7 +65,7 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
         uint256 expiresAt;
         uint256 totalWeightFor;     // Weighted votes FOR
         uint256 totalWeightAgainst; // Weighted votes AGAINST
-        uint256 totalStake;         // Total ETH staked
+        uint256 totalStake;         // Total KNOW tokens staked
         bool resolved;              // Whether consensus has been resolved
     }
 
@@ -131,13 +139,19 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
 
     constructor(
         address _registry,
-        address _params
+        address _params,
+        address _identityToken,
+        address _knomeeToken
     ) Ownable(msg.sender) {
         require(_registry != address(0), "Invalid registry");
         require(_params != address(0), "Invalid params");
+        require(_identityToken != address(0), "Invalid identity token");
+        require(_knomeeToken != address(0), "Invalid knomee token");
 
         registry = IdentityRegistry(_registry);
         params = GovernanceParameters(_params);
+        identityToken = IdentityToken(_identityToken);
+        knomeeToken = KnomeeToken(_knomeeToken);
     }
 
     // ============ Claim Creation ============
@@ -147,20 +161,28 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
      * @param primary Primary address to link to
      * @param platform Platform name (flexible string, e.g., "LinkedIn", "LinkedIn-business")
      * @param justification Why this link is legitimate
+     * @param knowStake Amount of KNOW tokens to stake
      * @return claimId ID of created claim
      */
     function requestLinkToPrimary(
         address primary,
         string calldata platform,
-        string calldata justification
-    ) external payable whenNotPaused nonReentrant returns (uint256 claimId) {
+        string calldata justification,
+        uint256 knowStake
+    ) external whenNotPaused nonReentrant returns (uint256 claimId) {
         require(registry.isPrimary(primary), "Not a primary");
         require(registry.getTier(msg.sender) == IdentityRegistry.IdentityTier.GreyGhost, "Already verified");
         require(bytes(platform).length > 0, "Platform required");
         require(bytes(justification).length > 0, "Justification required");
 
         uint256 requiredStake = params.getRequiredStake(uint8(ClaimType.LinkToPrimary));
-        require(msg.value >= requiredStake, "Insufficient stake");
+        require(knowStake >= requiredStake, "Insufficient stake");
+
+        // Pull KNOW tokens from caller
+        require(
+            knomeeToken.transferFrom(msg.sender, address(this), knowStake),
+            "KNOW transfer failed"
+        );
 
         claimId = _createClaim(
             ClaimType.LinkToPrimary,
@@ -171,17 +193,19 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
         );
 
         // Self-vouch with initial stake
-        _recordVouch(claimId, msg.sender, true, msg.value);
+        _recordVouch(claimId, msg.sender, true, knowStake);
     }
 
     /**
      * @notice Request Primary ID verification (Blue Checkmark)
      * @param justification Why you are a unique human
+     * @param knowStake Amount of KNOW tokens to stake
      * @return claimId ID of created claim
      */
     function requestPrimaryVerification(
-        string calldata justification
-    ) external payable whenNotPaused nonReentrant returns (uint256 claimId) {
+        string calldata justification,
+        uint256 knowStake
+    ) external whenNotPaused nonReentrant returns (uint256 claimId) {
         require(registry.getTier(msg.sender) == IdentityRegistry.IdentityTier.GreyGhost, "Already verified");
         require(bytes(justification).length > 0, "Justification required");
 
@@ -195,7 +219,13 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
         }
 
         uint256 requiredStake = params.getRequiredStake(uint8(ClaimType.NewPrimary));
-        require(msg.value >= requiredStake, "Insufficient stake");
+        require(knowStake >= requiredStake, "Insufficient stake");
+
+        // Pull KNOW tokens from caller
+        require(
+            knomeeToken.transferFrom(msg.sender, address(this), knowStake),
+            "KNOW transfer failed"
+        );
 
         claimId = _createClaim(
             ClaimType.NewPrimary,
@@ -206,7 +236,7 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
         );
 
         // Self-vouch with initial stake
-        _recordVouch(claimId, msg.sender, true, msg.value);
+        _recordVouch(claimId, msg.sender, true, knowStake);
     }
 
     /**
@@ -214,13 +244,15 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
      * @param addr1 First address
      * @param addr2 Second address
      * @param evidence Evidence of duplication
+     * @param knowStake Amount of KNOW tokens to stake
      * @return claimId ID of created claim
      */
     function challengeDuplicate(
         address addr1,
         address addr2,
-        string calldata evidence
-    ) external payable whenNotPaused nonReentrant returns (uint256 claimId) {
+        string calldata evidence,
+        uint256 knowStake
+    ) external whenNotPaused nonReentrant returns (uint256 claimId) {
         require(registry.isPrimary(addr1), "addr1 not primary");
         require(registry.isPrimary(addr2), "addr2 not primary");
         require(addr1 != addr2, "Same address");
@@ -238,7 +270,13 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
         }
 
         uint256 requiredStake = params.getRequiredStake(uint8(ClaimType.DuplicateFlag));
-        require(msg.value >= requiredStake, "Insufficient stake");
+        require(knowStake >= requiredStake, "Insufficient stake");
+
+        // Pull KNOW tokens from caller
+        require(
+            knomeeToken.transferFrom(msg.sender, address(this), knowStake),
+            "KNOW transfer failed"
+        );
 
         claimId = _createClaim(
             ClaimType.DuplicateFlag,
@@ -253,7 +291,7 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
         registry.markUnderChallenge(addr2, claimId);
 
         // Challenger vouches FOR (supporting the duplicate claim)
-        _recordVouch(claimId, msg.sender, true, msg.value);
+        _recordVouch(claimId, msg.sender, true, knowStake);
 
         lastDuplicateFlag[msg.sender] = params.getCurrentTime();
     }
@@ -263,53 +301,55 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
     /**
      * @notice Vouch FOR a claim
      * @param claimId ID of claim to vouch on
+     * @param knowStake Amount of KNOW tokens to stake
      */
-    function vouchFor(uint256 claimId)
+    function vouchFor(uint256 claimId, uint256 knowStake)
         external
-        payable
         whenNotPaused
         nonReentrant
     {
-        _vouch(claimId, true);
+        _vouch(claimId, true, knowStake);
     }
 
     /**
      * @notice Vouch AGAINST a claim
      * @param claimId ID of claim to vouch on
+     * @param knowStake Amount of KNOW tokens to stake
      */
-    function vouchAgainst(uint256 claimId)
+    function vouchAgainst(uint256 claimId, uint256 knowStake)
         external
-        payable
         whenNotPaused
         nonReentrant
     {
-        _vouch(claimId, false);
+        _vouch(claimId, false, knowStake);
     }
 
     /**
      * @notice Internal vouching logic
      * @param claimId ID of claim
      * @param isSupporting true=FOR, false=AGAINST
+     * @param knowStake Amount of KNOW tokens to stake
      */
-    function _vouch(uint256 claimId, bool isSupporting) internal {
+    function _vouch(uint256 claimId, bool isSupporting, uint256 knowStake) internal {
         IdentityClaim storage claim = claims[claimId];
         require(claim.status == ClaimStatus.Active, "Claim not active");
         require(!hasVouched[claimId][msg.sender], "Already vouched");
         require(claim.subject != msg.sender, "Cannot vouch on own claim");
 
-        // Check voucher is eligible
-        IdentityRegistry.IdentityTier tier = registry.getTier(msg.sender);
-        require(
-            tier == IdentityRegistry.IdentityTier.PrimaryID ||
-            tier == IdentityRegistry.IdentityTier.Oracle,
-            "Must be Primary or Oracle"
-        );
+        // Check voucher holds Identity Token with voting rights
+        require(identityToken.canVote(msg.sender), "Must hold voting Identity Token");
 
         // Validate stake
         uint256 requiredStake = params.getRequiredStake(uint8(claim.claimType));
-        require(msg.value >= requiredStake, "Insufficient stake");
+        require(knowStake >= requiredStake, "Insufficient stake");
 
-        _recordVouch(claimId, msg.sender, isSupporting, msg.value);
+        // Pull KNOW tokens from caller
+        require(
+            knomeeToken.transferFrom(msg.sender, address(this), knowStake),
+            "KNOW transfer failed"
+        );
+
+        _recordVouch(claimId, msg.sender, isSupporting, knowStake);
     }
 
     /**
@@ -317,7 +357,7 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
      * @param claimId Claim ID
      * @param voucher Address vouching
      * @param isSupporting true=FOR, false=AGAINST
-     * @param stake Amount staked
+     * @param stake Amount of KNOW staked
      */
     function _recordVouch(
         uint256 claimId,
@@ -327,8 +367,8 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
     ) internal {
         IdentityClaim storage claim = claims[claimId];
 
-        // Calculate vote weight
-        uint256 weight = _calculateVoteWeight(voucher);
+        // Calculate vote weight = Identity Weight × KNOW Stake
+        uint256 weight = _calculateVoteWeight(voucher, stake);
 
         // Record vouch
         vouchesOnClaim[claimId].push(Vouch({
@@ -486,7 +526,7 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
         Vouch[] storage vouches = vouchesOnClaim[claimId];
         bool approved = claim.status == ClaimStatus.Approved;
 
-        uint256 totalReward = 0;
+        uint256 totalRefund = 0;
         bool foundVoucher = false;
 
         for (uint256 i = 0; i < vouches.length; i++) {
@@ -504,33 +544,44 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
             bool wasCorrect = (approved && vouch.isSupporting) || (!approved && !vouch.isSupporting);
 
             if (wasCorrect) {
-                // Get stake back + share of slashed stakes
-                totalReward += vouch.stake;
-                totalReward += _calculateRewardShare(claimId, vouch.stake, approved);
+                // Refund stake
+                totalRefund += vouch.stake;
+
+                // Mint voting reward (proportional to stake)
+                uint256 rewardAmount = _calculateRewardShare(claimId, vouch.stake, approved);
+                if (rewardAmount > 0) {
+                    knomeeToken.mintVotingReward(msg.sender, rewardAmount);
+                }
 
                 emit StakeRefunded(claimId, msg.sender, vouch.stake);
+                emit RewardDistributed(claimId, msg.sender, rewardAmount);
             } else {
-                // Slash stake
+                // Slash stake (burns KNOW tokens)
                 uint256 slashRate = _getSlashRate(claim.claimType, approved);
                 uint256 slashAmount = (vouch.stake * slashRate) / 10000;
 
+                if (slashAmount > 0) {
+                    knomeeToken.slash(msg.sender, slashAmount, "Incorrect vote");
+                }
+
                 emit StakeSlashed(claimId, msg.sender, slashAmount);
 
-                // Refund remaining
+                // Refund remaining stake
                 uint256 refund = vouch.stake - slashAmount;
                 if (refund > 0) {
-                    totalReward += refund;
+                    totalRefund += refund;
                 }
             }
         }
 
         require(foundVoucher, "No vouch found");
 
-        if (totalReward > 0) {
-            (bool success, ) = msg.sender.call{value: totalReward}("");
-            require(success, "Transfer failed");
-
-            emit RewardDistributed(claimId, msg.sender, totalReward);
+        // Transfer KNOW refund
+        if (totalRefund > 0) {
+            require(
+                knomeeToken.transfer(msg.sender, totalRefund),
+                "KNOW refund failed"
+            );
         }
     }
 
@@ -594,16 +645,17 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
 
     /**
      * @notice Calculate vote weight for a voucher
+     * @dev Formula: Identity Weight × KNOW Stake
      * @param voucher Address of voucher
-     * @return Vote weight (1 for Primary, 100 for Oracle)
+     * @param knowStake Amount of KNOW tokens staked
+     * @return Vote weight (identity multiplier × stake amount)
      */
-    function _calculateVoteWeight(address voucher) internal view returns (uint256) {
-        if (registry.isOracle(voucher)) {
-            return params.oracleVoteWeight();
-        } else if (registry.isPrimary(voucher)) {
-            return params.primaryVoteWeight();
-        }
-        return 0;
+    function _calculateVoteWeight(address voucher, uint256 knowStake) internal view returns (uint256) {
+        // Get identity weight from IdentityToken contract
+        uint256 identityWeight = identityToken.getVotingWeight(voucher);
+
+        // Vote weight = Identity Weight × KNOW Stake
+        return identityWeight * knowStake;
     }
 
     // ============ View Functions ============
@@ -652,13 +704,13 @@ contract IdentityConsensus is ReentrancyGuard, Pausable, Ownable {
      * @notice Check if address can vouch on claim
      * @param voucher Address to check
      * @param claimId Claim ID
-     * @return canVouch true if can vouch
+     * @return allowed true if can vouch
      * @return reason Reason if cannot vouch
      */
     function canVouch(address voucher, uint256 claimId)
         external
         view
-        returns (bool canVouch, string memory reason)
+        returns (bool allowed, string memory reason)
     {
         IdentityClaim storage claim = claims[claimId];
 

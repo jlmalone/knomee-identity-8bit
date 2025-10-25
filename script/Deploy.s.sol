@@ -5,6 +5,8 @@ import "forge-std/Script.sol";
 import "../contracts/identity/GovernanceParameters.sol";
 import "../contracts/identity/IdentityRegistry.sol";
 import "../contracts/identity/IdentityConsensus.sol";
+import "../contracts/identity/IdentityToken.sol";
+import "../contracts/identity/KnomeeToken.sol";
 
 /**
  * @title Deploy Script for Knomee Identity Protocol
@@ -33,27 +35,47 @@ contract DeployScript is Script {
         GovernanceParameters params = new GovernanceParameters();
         console.log("GovernanceParameters deployed to:", address(params));
 
-        // 2. Deploy IdentityRegistry
-        console.log("\n2. Deploying IdentityRegistry...");
+        // 2. Deploy Token Contracts
+        console.log("\n2. Deploying IdentityToken (IDT)...");
+        IdentityToken identityToken = new IdentityToken();
+        console.log("IdentityToken deployed to:", address(identityToken));
+
+        console.log("\n3. Deploying KnomeeToken (KNOW)...");
+        KnomeeToken knomeeToken = new KnomeeToken();
+        console.log("KnomeeToken deployed to:", address(knomeeToken));
+
+        // 3. Deploy IdentityRegistry
+        console.log("\n4. Deploying IdentityRegistry...");
         IdentityRegistry registry = new IdentityRegistry();
         console.log("IdentityRegistry deployed to:", address(registry));
 
-        // 3. Deploy IdentityConsensus
-        console.log("\n3. Deploying IdentityConsensus...");
+        // 4. Deploy IdentityConsensus (with token addresses)
+        console.log("\n5. Deploying IdentityConsensus...");
         IdentityConsensus consensus = new IdentityConsensus(
             address(registry),
-            address(params)
+            address(params),
+            address(identityToken),
+            address(knomeeToken)
         );
         console.log("IdentityConsensus deployed to:", address(consensus));
 
-        // 4. Link contracts
-        console.log("\n4. Linking contracts...");
+        // 5. Link contracts
+        console.log("\n6. Linking contracts...");
         registry.setConsensusContract(address(consensus));
         console.log("Consensus contract linked to registry");
 
-        // 5. Verify deployment
+        identityToken.setIdentityRegistry(address(registry));
+        console.log("IdentityToken configured with registry");
+
+        knomeeToken.setRegistryContract(address(registry));
+        knomeeToken.setConsensusContract(address(consensus));
+        console.log("KnomeeToken configured with registry and consensus");
+
+        // 7. Verify deployment
         console.log("\n=== DEPLOYMENT COMPLETE ===");
         console.log("GovernanceParameters:", address(params));
+        console.log("IdentityToken (IDT):", address(identityToken));
+        console.log("KnomeeToken (KNOW):", address(knomeeToken));
         console.log("IdentityRegistry:", address(registry));
         console.log("IdentityConsensus:", address(consensus));
 
@@ -70,10 +92,12 @@ contract DeployScript is Script {
 
         vm.stopBroadcast();
 
-        // 7. Save deployment addresses
+        // 8. Save deployment addresses
         console.log("\n=== SAVE THESE ADDRESSES ===");
         console.log("Add to your .env file:");
         console.log("GOVERNANCE_PARAMS_ADDRESS=", address(params));
+        console.log("IDENTITY_TOKEN_ADDRESS=", address(identityToken));
+        console.log("KNOMEE_TOKEN_ADDRESS=", address(knomeeToken));
         console.log("IDENTITY_REGISTRY_ADDRESS=", address(registry));
         console.log("IDENTITY_CONSENSUS_ADDRESS=", address(consensus));
 
