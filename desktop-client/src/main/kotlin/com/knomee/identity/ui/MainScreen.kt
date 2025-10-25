@@ -26,6 +26,7 @@ enum class Screen {
     CLAIM_VERIFICATION,
     VOUCH_SYSTEM,
     ACTIVE_CLAIMS,
+    MY_VOUCHES,
     ORACLE_PANEL,
     SETTINGS
 }
@@ -85,9 +86,14 @@ fun MainScreen() {
                 Screen.VOUCH_SYSTEM -> VouchSystemScreen(
                     viewModel = viewModel,
                     onViewClaims = { currentScreen = Screen.ACTIVE_CLAIMS },
+                    onViewMyVouches = { currentScreen = Screen.MY_VOUCHES },
                     onBack = { currentScreen = Screen.TITLE }
                 )
                 Screen.ACTIVE_CLAIMS -> ActiveClaimsScreen(
+                    viewModel = viewModel,
+                    onBack = { currentScreen = Screen.VOUCH_SYSTEM }
+                )
+                Screen.MY_VOUCHES -> MyVouchesScreen(
                     viewModel = viewModel,
                     onBack = { currentScreen = Screen.VOUCH_SYSTEM }
                 )

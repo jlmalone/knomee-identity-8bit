@@ -202,6 +202,7 @@ fun ClaimVerificationScreen(
 fun VouchSystemScreen(
     viewModel: com.knomee.identity.viewmodel.IdentityViewModel,
     onViewClaims: () -> Unit,
+    onViewMyVouches: () -> Unit,
     onBack: () -> Unit
 ) {
     Column(
@@ -248,7 +249,7 @@ fun VouchSystemScreen(
 
         RetroMenuButton("VIEW ACTIVE CLAIMS", onClick = onViewClaims)
         Spacer(modifier = Modifier.height(16.dp))
-        RetroMenuButton("MY VOUCHES", onClick = { /* TODO */ })
+        RetroMenuButton("MY VOUCHES", onClick = onViewMyVouches)
         Spacer(modifier = Modifier.height(16.dp))
         RetroMenuButton("CLAIM REWARDS", onClick = { /* TODO */ })
 
