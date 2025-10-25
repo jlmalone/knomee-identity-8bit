@@ -408,6 +408,45 @@ class IdentityViewModel {
     }
 
     /**
+     * Claim rewards from a resolved claim
+     */
+    fun claimRewards(claimId: BigInteger) {
+        val consensusAddress = web3Service?.consensusAddress
+        if (consensusAddress.isNullOrEmpty()) {
+            errorMessage = "Consensus contract not configured"
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                isTransactionPending = true
+                transactionStatus = "Claiming rewards..."
+
+                val result = transactionService?.claimRewards(consensusAddress, claimId)
+
+                when (result) {
+                    is TransactionResult.Success -> {
+                        transactionStatus = "Rewards claimed! TX: ${result.txHash.take(10)}..."
+                        loadActiveClaims()
+                    }
+                    is TransactionResult.Error -> {
+                        errorMessage = result.message
+                        transactionStatus = null
+                    }
+                    else -> {
+                        transactionStatus = "Transaction pending..."
+                    }
+                }
+            } catch (e: Exception) {
+                errorMessage = "Claim rewards failed: ${e.message}"
+                transactionStatus = null
+            } finally {
+                isTransactionPending = false
+            }
+        }
+    }
+
+    /**
      * Cleanup when ViewModel is disposed
      */
     fun onDispose() {
