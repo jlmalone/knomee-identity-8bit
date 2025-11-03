@@ -22,7 +22,7 @@ import com.knomee.identity.ui.MainScreen
 
 fun main() = application {
     val windowState = rememberWindowState(width = 1024.dp, height = 768.dp)
-
+//
     Window(
         onCloseRequest = ::exitApplication,
         title = "KNOMEE IDENTITY PROTOCOL v0.1",
