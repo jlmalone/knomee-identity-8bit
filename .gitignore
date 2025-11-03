@@ -41,3 +41,4 @@ lcov.info
 # Deployment artifacts
 deployments/
 !deployments/.gitkeep
+/lib/
