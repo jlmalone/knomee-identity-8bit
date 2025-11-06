@@ -67,6 +67,9 @@ contract DeployScript is Script {
         registry.setIdentityToken(address(identityToken));
         console.log("IdentityToken linked to registry");
 
+        registry.setKnomeeToken(address(knomeeToken));
+        console.log("KnomeeToken linked to registry");
+
         identityToken.setIdentityRegistry(address(registry));
         console.log("IdentityToken configured with registry");
 

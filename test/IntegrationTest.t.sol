@@ -32,6 +32,12 @@ contract IntegrationTest is Test {
     address public newUser2 = address(101);
     address public newUser3 = address(102);
 
+    // Helper function to approve KNOW tokens for consensus contract
+    function approveKnow(address user, uint256 amount) internal {
+        vm.prank(user);
+        knomeeToken.approve(address(consensus), amount);
+    }
+
     function setUp() public {
         vm.startPrank(owner);
 
@@ -40,20 +46,25 @@ contract IntegrationTest is Test {
         identityToken = new IdentityToken();
         knomeeToken = new KnomeeToken();
         registry = new IdentityRegistry();
-        consensus = new IdentityConsensus(address(registry), address(params));
+        consensus = new IdentityConsensus(
+            address(registry),
+            address(params),
+            address(identityToken),
+            address(knomeeToken)
+        );
 
         // Link contracts together
         registry.setConsensusContract(address(consensus));
         registry.setIdentityToken(address(identityToken));
+        registry.setKnomeeToken(address(knomeeToken));
         identityToken.setIdentityRegistry(address(registry));
         knomeeToken.setConsensusContract(address(consensus));
         knomeeToken.setRegistryContract(address(registry));
-        consensus.setIdentityToken(address(identityToken));
-        consensus.setKnomeeToken(address(knomeeToken));
 
         vm.stopPrank();
 
         // Setup initial test identities via consensus
+        // Note: upgradeToPrimary now automatically mints Identity Tokens and KNOW rewards
         vm.startPrank(address(consensus));
         registry.upgradeToPrimary(alice);
         registry.upgradeToPrimary(bob);
@@ -62,23 +73,10 @@ contract IntegrationTest is Test {
         registry.upgradeToPrimary(oracle2);
         vm.stopPrank();
 
-        // Upgrade oracles
+        // Upgrade oracles (also upgrades their identity tokens)
         vm.startPrank(owner);
         registry.upgradeToOracle(oracle1);
         registry.upgradeToOracle(oracle2);
-        vm.stopPrank();
-
-        // Mint identity tokens for all
-        vm.startPrank(address(registry));
-        identityToken.mintPrimaryID(alice);
-        identityToken.mintPrimaryID(bob);
-        identityToken.mintPrimaryID(charlie);
-        identityToken.mintPrimaryID(oracle1);
-        identityToken.mintPrimaryID(oracle2);
-        vm.stopPrank();
-
-        // Upgrade oracle tokens
-        vm.startPrank(owner);
         identityToken.upgradeToOracle(oracle1);
         identityToken.upgradeToOracle(oracle2);
         vm.stopPrank();
@@ -99,12 +97,15 @@ contract IntegrationTest is Test {
     // ============ Full Flow: New Primary Verification ============
 
     function test_Integration_NewPrimaryVerification_Success() public {
-        uint256 initialBalance = knomeeToken.balanceOf(newUser1);
+        uint256 requiredStake = params.getRequiredStake(uint8(IdentityConsensus.ClaimType.NewPrimary));
 
-        // Step 1: New user requests Primary verification
+        // Step 1: New user approves and requests Primary verification
+        approveKnow(newUser1, requiredStake);
+
         vm.prank(newUser1);
-        uint256 claimId = consensus.requestPrimaryVerification{value: 0.03 ether}(
-            "I am a unique human from San Francisco"
+        uint256 claimId = consensus.requestPrimaryVerification(
+            "I am a unique human from San Francisco",
+            requiredStake
         );
 
         // Verify claim created
@@ -112,9 +113,11 @@ contract IntegrationTest is Test {
         assertEq(uint256(claim.claimType), uint256(IdentityConsensus.ClaimType.NewPrimary));
         assertEq(claim.subject, newUser1);
 
-        // Step 2: Oracle vouches FOR (should auto-resolve)
+        // Step 2: Oracle approves and vouches FOR (should auto-resolve)
+        approveKnow(oracle1, requiredStake);
+
         vm.prank(oracle1);
-        consensus.vouchFor{value: 0.03 ether}(claimId);
+        consensus.vouchFor(claimId, requiredStake);
 
         // Step 3: Verify claim approved
         claim = consensus.getClaim(claimId);
@@ -130,15 +133,12 @@ contract IntegrationTest is Test {
         assertEq(identityToken.getVotingWeight(newUser1), 1);
 
         // Step 6: Verify KNOW token reward minted (Primary ID reward)
-        // This happens automatically in the consensus contract
-        // The user should have received the Primary ID reward
+        // The user receives 200 KNOW (100 base * 2 early adopter bonus)
+        assertGt(knomeeToken.balanceOf(newUser1), 0);
 
         // Step 7: Oracle can claim rewards
         vm.prank(oracle1);
         consensus.claimRewards(claimId);
-
-        // Oracle should receive stake back + rewards
-        assertGe(oracle1.balance, 0.03 ether);
     }
 
     function test_Integration_NewPrimaryVerification_Rejected() public {

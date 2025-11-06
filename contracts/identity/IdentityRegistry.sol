@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./IdentityToken.sol";
+import "./KnomeeToken.sol";
 
 /**
  * @title IdentityRegistry
@@ -70,6 +71,9 @@ contract IdentityRegistry is Ownable {
 
     /// @notice Identity Token (soul-bound NFT) contract
     IdentityToken public identityToken;
+
+    /// @notice Knomee Token (ERC-20 rewards) contract
+    KnomeeToken public knomeeToken;
 
     // ============ Events ============
 
@@ -145,6 +149,16 @@ contract IdentityRegistry is Ownable {
     function setIdentityToken(address _identityToken) external onlyOwner {
         require(_identityToken != address(0), "Invalid address");
         identityToken = IdentityToken(_identityToken);
+    }
+
+    /**
+     * @notice Set the Knomee Token contract address
+     * @param _knomeeToken Address of KnomeeToken contract
+     * @dev Only callable by owner during initial setup
+     */
+    function setKnomeeToken(address _knomeeToken) external onlyOwner {
+        require(_knomeeToken != address(0), "Invalid address");
+        knomeeToken = KnomeeToken(_knomeeToken);
     }
 
     /**
@@ -228,6 +242,11 @@ contract IdentityRegistry is Ownable {
             identityToken.mintPrimaryID(addr);
         }
 
+        // Mint KNOW token reward for successful Primary verification
+        if (address(knomeeToken) != address(0)) {
+            knomeeToken.mintPrimaryIDReward(addr);
+        }
+
         emit IdentityVerified(addr, IdentityTier.PrimaryID, block.timestamp);
     }
 
@@ -247,6 +266,14 @@ contract IdentityRegistry is Ownable {
         // If downgrading from Primary, clear any linked IDs
         if (oldTier >= IdentityTier.PrimaryID && newTier < IdentityTier.PrimaryID) {
             _clearLinkedIds(addr);
+        }
+
+        // If downgrading to GreyGhost, revoke identity token
+        if (newTier == IdentityTier.GreyGhost && address(identityToken) != address(0)) {
+            // Check if account has a token before trying to revoke
+            if (identityToken.balanceOf(addr) > 0) {
+                identityToken.revoke(addr);
+            }
         }
 
         emit IdentityDowngraded(addr, oldTier, newTier);
