@@ -1,5 +1,6 @@
 package com.knomee.identity.blockchain
 
+import com.knomee.identity.utils.logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.web3j.abi.FunctionEncoder
@@ -26,6 +27,7 @@ class ContractRepository(
     private val identityTokenAddress: String? = null,
     private val knomeeTokenAddress: String? = null
 ) {
+    private val log = logger()
 
     /**
      * Get identity data for an address from IdentityRegistry
@@ -53,7 +55,7 @@ class ContractRepository(
             ).send()
 
             if (response.hasError()) {
-                println("Error calling getIdentity: ${response.error.message}")
+                log.error("Error calling getIdentity: ${response.error.message}")
                 return@withContext null
             }
 
@@ -78,7 +80,7 @@ class ContractRepository(
                 reputationScore = reputationScore
             )
         } catch (e: Exception) {
-            println("Exception getting identity: ${e.message}")
+            log.error("Exception getting identity", e)
             null
         }
     }
@@ -145,7 +147,7 @@ class ContractRepository(
             ).send()
 
             if (response.hasError()) {
-                println("Error calling getClaim: ${response.error.message}")
+                log.error("Error calling getClaim: ${response.error.message}")
                 return@withContext null
             }
 
@@ -169,7 +171,7 @@ class ContractRepository(
                 expiresAt = (result[12] as Uint256).value
             )
         } catch (e: Exception) {
-            println("Exception getting claim: ${e.message}")
+            log.error("Exception getting claim", e)
             null
         }
     }
@@ -257,7 +259,7 @@ class ContractRepository(
             val result = FunctionReturnDecoder.decode(response.value, function.outputParameters)
             if (result.isNotEmpty()) (result[0] as Uint).value else null
         } catch (e: Exception) {
-            println("Exception getting KNOW balance: ${e.message}")
+            log.error("Exception getting KNOW balance", e)
             null
         }
     }
@@ -289,7 +291,7 @@ class ContractRepository(
                 balance > BigInteger.ZERO
             } else false
         } catch (e: Exception) {
-            println("Exception checking IDT ownership: ${e.message}")
+            log.error("Exception checking IDT ownership", e)
             false
         }
     }
@@ -318,7 +320,7 @@ class ContractRepository(
             val result = FunctionReturnDecoder.decode(response.value, function.outputParameters)
             if (result.isNotEmpty()) (result[0] as Uint).value else null
         } catch (e: Exception) {
-            println("Exception getting voting weight: ${e.message}")
+            log.error("Exception getting voting weight", e)
             null
         }
     }

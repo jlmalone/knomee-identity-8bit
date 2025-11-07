@@ -1,7 +1,10 @@
 package com.knomee.identity.blockchain
 
+import com.knomee.identity.utils.logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import org.web3j.abi.EventEncoder
@@ -22,17 +25,24 @@ import java.math.BigInteger
 /**
  * Service for listening to blockchain events
  * Monitors ClaimCreated, VouchSubmitted, ClaimResolved events
+ *
+ * FIXED: Uses callbackFlow to properly emit events to Flow
  */
 class EventListener(
     private val web3j: Web3j,
     private val consensusAddress: String
 ) {
+    private val log = logger()
 
     /**
-     * Listen for ClaimCreated events
+     * Listen for ClaimCreated events in real-time
      * Emitted when someone creates a new identity claim
+     *
+     * FIXED: Now properly emits events to Flow using callbackFlow
      */
-    fun listenForClaimCreated(): Flow<ClaimCreatedEvent> = flow {
+    fun listenForClaimCreated(): Flow<ClaimCreatedEvent> = callbackFlow {
+        log.info("Starting ClaimCreated event listener")
+
         try {
             val event = Event(
                 "ClaimCreated",
@@ -49,17 +59,32 @@ class EventListener(
                 consensusAddress
             ).addSingleTopic(EventEncoder.encode(event))
 
-            web3j.ethLogFlowable(filter).subscribe { log ->
-                try {
-                    val claimCreated = parseClaimCreatedEvent(log)
-                    // Emit to flow
-                    println("Claim created: $claimCreated")
-                } catch (e: Exception) {
-                    println("Error parsing ClaimCreated event: ${e.message}")
+            val subscription = web3j.ethLogFlowable(filter).subscribe(
+                { eventLog ->
+                    try {
+                        val claimCreated = parseClaimCreatedEvent(eventLog)
+                        log.info("Claim created: $claimCreated")
+
+                        // FIXED: Actually emit to flow!
+                        trySend(claimCreated)
+                    } catch (e: Exception) {
+                        log.error("Error parsing ClaimCreated event", e)
+                    }
+                },
+                { error ->
+                    log.error("Error in ClaimCreated subscription", error)
+                    close(error)
                 }
+            )
+
+            // Wait for cancellation
+            awaitClose {
+                log.info("Closing ClaimCreated event listener")
+                subscription.dispose()
             }
         } catch (e: Exception) {
-            println("Error setting up ClaimCreated listener: ${e.message}")
+            log.error("Error setting up ClaimCreated listener", e)
+            close(e)
         }
     }
 
@@ -86,15 +111,15 @@ class EventListener(
             val logs = web3j.ethGetLogs(filter).send().logs
             logs.mapNotNull { logResult ->
                 try {
-                    val log = logResult.get() as Log
-                    parseClaimCreatedEvent(log)
+                    val eventLog = logResult.get() as Log
+                    parseClaimCreatedEvent(eventLog)
                 } catch (e: Exception) {
-                    println("Error parsing log: ${e.message}")
+                    log.warn("Error parsing event log", e)
                     null
                 }
             }
         } catch (e: Exception) {
-            println("Error getting recent claims: ${e.message}")
+            log.error("Error getting recent claims", e)
             emptyList()
         }
     }
@@ -135,10 +160,12 @@ class EventListener(
             val currentBlock = web3j.ethBlockNumber().send().blockNumber
             val fromBlock = (currentBlock - BigInteger.valueOf(lookbackBlocks)).max(BigInteger.ZERO)
 
+            log.debug("Fetching active claims from block $fromBlock to $currentBlock")
+
             val recentClaims = getRecentClaims(fromBlock)
             recentClaims.map { it.claimId }
         } catch (e: Exception) {
-            println("Error getting all active claims: ${e.message}")
+            log.error("Error getting all active claims", e)
             emptyList()
         }
     }

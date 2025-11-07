@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.knomee.identity.theme.RetroColors
 import com.knomee.identity.theme.RetroTypography
+import com.knomee.identity.utils.ValidationUtils
 
 /**
  * Dialog for requesting primary ID verification
@@ -24,6 +25,7 @@ fun RequestPrimaryIDDialog(
 ) {
     var justification by remember { mutableStateOf("") }
     var stakeAmount by remember { mutableStateOf("0.03") }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -108,7 +110,19 @@ fun RequestPrimaryIDDialog(
                 "• Lose: 30% slashing"
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Validation error display
+            validationError?.let { error ->
+                Text(
+                    text = error,
+                    style = RetroTypography.caption,
+                    color = RetroColors.Error,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
             // Buttons
             Row(
@@ -117,11 +131,24 @@ fun RequestPrimaryIDDialog(
             ) {
                 RetroDialogButton("CANCEL", RetroColors.Error) { onDismiss() }
                 RetroDialogButton("SUBMIT", RetroColors.Success) {
-                    val stake = stakeAmount.toDoubleOrNull() ?: 0.03
-                    if (justification.isNotBlank() && stake >= 0.03) {
-                        onSubmit(justification, stake)
-                        onDismiss()
+                    // Validate justification
+                    val justificationError = ValidationUtils.validateJustification(justification, minLength = 20)
+                    if (justificationError != null) {
+                        validationError = justificationError
+                        return@RetroDialogButton
                     }
+
+                    // Validate stake amount
+                    val stakeError = ValidationUtils.validateStakeAmount(stakeAmount, minStake = 0.03)
+                    if (stakeError != null) {
+                        validationError = stakeError
+                        return@RetroDialogButton
+                    }
+
+                    val stake = stakeAmount.toDouble()
+                    validationError = null
+                    onSubmit(justification, stake)
+                    onDismiss()
                 }
             }
         }
@@ -140,6 +167,7 @@ fun LinkSecondaryAccountDialog(
     var platform by remember { mutableStateOf("") }
     var justification by remember { mutableStateOf("") }
     var stakeAmount by remember { mutableStateOf("0.01") }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -263,7 +291,19 @@ fun LinkSecondaryAccountDialog(
                 "• Lose: 10% slashing"
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Validation error display
+            validationError?.let { error ->
+                Text(
+                    text = error,
+                    style = RetroTypography.caption,
+                    color = RetroColors.Error,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
             // Buttons
             Row(
@@ -272,12 +312,37 @@ fun LinkSecondaryAccountDialog(
             ) {
                 RetroDialogButton("CANCEL", RetroColors.Error) { onDismiss() }
                 RetroDialogButton("SUBMIT", RetroColors.Success) {
-                    val stake = stakeAmount.toDoubleOrNull() ?: 0.01
-                    if (primaryAddress.isNotBlank() && platform.isNotBlank() &&
-                        justification.isNotBlank() && stake >= 0.01) {
-                        onSubmit(primaryAddress, platform, justification, stake)
-                        onDismiss()
+                    // Validate primary address
+                    val checksumAddress = ValidationUtils.validateAndChecksumAddress(primaryAddress)
+                    if (checksumAddress == null) {
+                        validationError = "Invalid Ethereum address"
+                        return@RetroDialogButton
                     }
+
+                    // Validate platform
+                    if (platform.isBlank() || platform.length < 2) {
+                        validationError = "Platform name must be at least 2 characters"
+                        return@RetroDialogButton
+                    }
+
+                    // Validate justification
+                    val justificationError = ValidationUtils.validateJustification(justification, minLength = 20)
+                    if (justificationError != null) {
+                        validationError = justificationError
+                        return@RetroDialogButton
+                    }
+
+                    // Validate stake amount
+                    val stakeError = ValidationUtils.validateStakeAmount(stakeAmount, minStake = 0.01)
+                    if (stakeError != null) {
+                        validationError = stakeError
+                        return@RetroDialogButton
+                    }
+
+                    val stake = stakeAmount.toDouble()
+                    validationError = null
+                    onSubmit(checksumAddress, platform, justification, stake)
+                    onDismiss()
                 }
             }
         }

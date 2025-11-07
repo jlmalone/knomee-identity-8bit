@@ -1,5 +1,6 @@
 package com.knomee.identity.blockchain
 
+import com.knomee.identity.utils.logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.web3j.abi.FunctionEncoder
@@ -25,6 +26,7 @@ class TransactionService(
     private val web3j: Web3j,
     private val credentials: Credentials
 ) {
+    private val log = logger()
     private val gasProvider = DefaultGasProvider()
 
     /**
@@ -37,6 +39,8 @@ class TransactionService(
         stakeAmount: BigInteger
     ): TransactionResult = withContext(Dispatchers.IO) {
         try {
+            log.info("Requesting primary verification with stake: $stakeAmount")
+
             // Encode function: requestPrimaryVerification(string justification)
             val function = Function(
                 "requestPrimaryVerification",
@@ -46,6 +50,7 @@ class TransactionService(
 
             submitTransaction(consensusAddress, function, stakeAmount)
         } catch (e: Exception) {
+            log.error("Failed to request primary verification", e)
             TransactionResult.Error("Failed to request primary verification: ${e.message}")
         }
     }
@@ -62,6 +67,8 @@ class TransactionService(
         stakeAmount: BigInteger
     ): TransactionResult = withContext(Dispatchers.IO) {
         try {
+            log.info("Requesting link to primary $primaryAddress on $platform")
+
             val function = Function(
                 "requestLinkToPrimary",
                 listOf(
@@ -74,6 +81,7 @@ class TransactionService(
 
             submitTransaction(consensusAddress, function, stakeAmount)
         } catch (e: Exception) {
+            log.error("Failed to request link", e)
             TransactionResult.Error("Failed to request link: ${e.message}")
         }
     }
@@ -208,21 +216,25 @@ class TransactionService(
             val response: EthSendTransaction = web3j.ethSendRawTransaction(hexValue).send()
 
             if (response.hasError()) {
+                log.error("Transaction failed: ${response.error.message}")
                 return TransactionResult.Error("Transaction failed: ${response.error.message}")
             }
 
             val txHash = response.transactionHash
-            println("Transaction sent: $txHash")
+            log.info("Transaction sent: $txHash")
 
             // Poll for receipt
             val receipt = pollForReceipt(txHash)
 
             return if (receipt != null && receipt.isStatusOK) {
+                log.info("Transaction succeeded: $txHash (gas: ${receipt.gasUsed})")
                 TransactionResult.Success(txHash, receipt.gasUsed)
             } else {
+                log.error("Transaction reverted: $txHash")
                 TransactionResult.Error("Transaction reverted: $txHash")
             }
         } catch (e: Exception) {
+            log.error("Transaction error", e)
             return TransactionResult.Error("Transaction error: ${e.message}")
         }
     }
@@ -235,13 +247,15 @@ class TransactionService(
             try {
                 val receiptResponse = web3j.ethGetTransactionReceipt(txHash).send()
                 if (receiptResponse.transactionReceipt.isPresent) {
+                    log.debug("Receipt found for $txHash")
                     return receiptResponse.transactionReceipt.get()
                 }
                 kotlinx.coroutines.delay(1000) // Wait 1 second between polls
             } catch (e: Exception) {
-                println("Error polling receipt: ${e.message}")
+                log.error("Error polling receipt for $txHash", e)
             }
         }
+        log.warn("Receipt not found after 30 seconds for $txHash")
         return null
     }
 }

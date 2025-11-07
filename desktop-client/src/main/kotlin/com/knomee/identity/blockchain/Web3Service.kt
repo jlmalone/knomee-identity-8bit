@@ -1,5 +1,6 @@
 package com.knomee.identity.blockchain
 
+import com.knomee.identity.utils.logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.web3j.crypto.Credentials
@@ -16,6 +17,7 @@ class Web3Service(
     private val rpcUrl: String = "http://127.0.0.1:8545", // Local Anvil by default
     private val privateKey: String? = null // Optional: for transaction signing
 ) {
+    private val log = logger()
     private val web3j: Web3j = Web3j.build(HttpService(rpcUrl))
     private val credentials: Credentials? = privateKey?.let { Credentials.create(it) }
     private val gasProvider = DefaultGasProvider()
@@ -32,6 +34,7 @@ class Web3Service(
         try {
             web3j.web3ClientVersion().send().web3ClientVersion != null
         } catch (e: Exception) {
+            log.error("Failed to check connection", e)
             false
         }
     }
@@ -43,6 +46,7 @@ class Web3Service(
         try {
             web3j.ethChainId().send().chainId
         } catch (e: Exception) {
+            log.error("Failed to get chain ID", e)
             null
         }
     }
@@ -54,6 +58,7 @@ class Web3Service(
         try {
             web3j.ethBlockNumber().send().blockNumber
         } catch (e: Exception) {
+            log.error("Failed to get block number", e)
             null
         }
     }
@@ -66,6 +71,7 @@ class Web3Service(
             web3j.ethGetBalance(address, org.web3j.protocol.core.DefaultBlockParameterName.LATEST)
                 .send().balance
         } catch (e: Exception) {
+            log.error("Failed to get balance for $address", e)
             null
         }
     }

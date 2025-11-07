@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.knomee.identity.blockchain.*
+import com.knomee.identity.config.AppConfig
+import com.knomee.identity.utils.logger
 import kotlinx.coroutines.*
 import org.web3j.protocol.Web3j
 import org.web3j.protocol.http.HttpService
@@ -14,6 +16,8 @@ import java.math.BigInteger
  * Bridges between UI and Web3 services
  */
 class IdentityViewModel {
+    private val log = logger()
+
     // Web3 Service
     private var web3Service: Web3Service? = null
     private var contractRepository: ContractRepository? = null
@@ -67,19 +71,19 @@ class IdentityViewModel {
         private set
 
     /**
-     * Connect to Ethereum network (Anvil local testnet)
+     * Connect to Ethereum network
      */
-    fun connect(useTestAccount: Boolean = true) {
+    fun connect(useTestAccount: Boolean = AppConfig.isDevelopment) {
         viewModelScope.launch {
             try {
                 // Initialize Web3 service
-                web3Service = if (useTestAccount) {
+                web3Service = if (useTestAccount && AppConfig.privateKey != null) {
                     Web3Service(
-                        rpcUrl = Web3Service.ANVIL_RPC,
-                        privateKey = Web3Service.ANVIL_TEST_PRIVATE_KEY
+                        rpcUrl = AppConfig.rpcUrl,
+                        privateKey = AppConfig.privateKey!!
                     )
                 } else {
-                    Web3Service(rpcUrl = Web3Service.ANVIL_RPC)
+                    Web3Service(rpcUrl = AppConfig.rpcUrl)
                 }
 
                 // Check connection
@@ -91,15 +95,17 @@ class IdentityViewModel {
                     chainId = web3Service?.getChainId()
                     blockNumber = web3Service?.getBlockNumber()
 
-                    println("✅ Connected to Ethereum")
-                    println("   Chain ID: $chainId")
-                    println("   Block: $blockNumber")
-                    println("   Address: $currentAddress")
+                    log.info("✅ Connected to Ethereum")
+                    log.info("   Chain ID: $chainId")
+                    log.info("   Block: $blockNumber")
+                    log.info("   Address: $currentAddress")
                 } else {
                     errorMessage = "Failed to connect to Ethereum network"
+                    log.error("Failed to connect to Ethereum network")
                 }
             } catch (e: Exception) {
                 errorMessage = "Connection error: ${e.message}"
+                log.error("Connection error", e)
                 isConnected = false
             }
         }
@@ -135,7 +141,7 @@ class IdentityViewModel {
             service.consensusAddress = consensus
 
             // Initialize contract repository
-            val web3j = Web3j.build(HttpService(Web3Service.ANVIL_RPC))
+            val web3j = Web3j.build(HttpService(AppConfig.rpcUrl))
             contractRepository = ContractRepository(
                 web3j = web3j,
                 registryAddress = registry,
@@ -147,8 +153,8 @@ class IdentityViewModel {
 
             // Initialize transaction service
             web3Service?.let { service ->
-                if (service.getWalletAddress() != null) {
-                    val credentials = org.web3j.crypto.Credentials.create(Web3Service.ANVIL_TEST_PRIVATE_KEY)
+                if (service.getWalletAddress() != null && AppConfig.privateKey != null) {
+                    val credentials = org.web3j.crypto.Credentials.create(AppConfig.privateKey)
                     transactionService = TransactionService(web3j, credentials)
                 }
             }
@@ -173,9 +179,10 @@ class IdentityViewModel {
             try {
                 identityData = contractRepository?.getIdentity(address)
                 currentTier = identityData?.tier?.displayName ?: "GREYGHOST"
-                println("Loaded identity: $identityData")
+                log.debug("Loaded identity: $identityData")
             } catch (e: Exception) {
                 errorMessage = "Failed to load identity: ${e.message}"
+                log.error("Failed to load identity", e)
             }
         }
     }
@@ -187,9 +194,10 @@ class IdentityViewModel {
         viewModelScope.launch {
             try {
                 governanceParams = contractRepository?.getGovernanceParameters()
-                println("Loaded governance: $governanceParams")
+                log.debug("Loaded governance: $governanceParams")
             } catch (e: Exception) {
                 errorMessage = "Failed to load governance: ${e.message}"
+                log.error("Failed to load governance", e)
             }
         }
     }
@@ -214,10 +222,10 @@ class IdentityViewModel {
                 }
 
                 activeClaims = claims
-                println("Loaded ${claims.size} active claims")
+                log.info("Loaded ${claims.size} active claims")
             } catch (e: Exception) {
                 errorMessage = "Failed to load claims: ${e.message}"
-                println("Error loading claims: ${e.message}")
+                log.error("Error loading claims", e)
             }
         }
     }
@@ -256,12 +264,13 @@ class IdentityViewModel {
                 hasIdentityToken = contractRepository?.hasIdentityToken(address) ?: false
                 votingWeight = contractRepository?.getVotingWeight(address)
 
-                println("Token balances loaded:")
-                println("  KNOW: ${knomeeTokenBalance ?: "N/A"}")
-                println("  Has IDT: $hasIdentityToken")
-                println("  Voting Weight: ${votingWeight ?: "N/A"}")
+                log.info("Token balances loaded:")
+                log.info("  KNOW: ${knomeeTokenBalance ?: "N/A"}")
+                log.info("  Has IDT: $hasIdentityToken")
+                log.info("  Voting Weight: ${votingWeight ?: "N/A"}")
             } catch (e: Exception) {
                 errorMessage = "Failed to load token balances: ${e.message}"
+                log.error("Failed to load token balances", e)
             }
         }
     }
