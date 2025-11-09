@@ -7,6 +7,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -50,6 +52,7 @@ import kotlin.math.floor
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.random.Random
 import kotlin.math.min
 
 private data class SpotInfo(
@@ -87,8 +90,26 @@ private data class CitySpot(
 }
 
 private data class Enemy(
-    val position: Offset,
+    var position: Offset,
     val color: Color
+)
+
+private data class TurnLogEntry(val turn: Int, val message: String)
+
+private data class NpcAgent(val name: String, val role: NpcRole)
+
+private enum class NpcRole {
+    PRIMARY,
+    ORACLE,
+    CHALLENGER,
+    SYBIL
+}
+
+data class EncounterRoom(
+    val id: String,
+    val description: String,
+    val position: Offset,
+    var resolved: Boolean = false
 )
 
 private enum class FacingDirection {
@@ -486,7 +507,8 @@ private fun IdentityCityHud(
     votingWeight: BigInteger?,
     activeClaims: List<ClaimData>,
     governanceParams: GovernanceParams?,
-    isConnected: Boolean
+    isConnected: Boolean,
+    modifier: Modifier = Modifier
 ) {
     val votingDisplay = votingWeight?.toString()
         ?: identityData?.getVotingWeight()?.toString()
@@ -505,27 +527,24 @@ private fun IdentityCityHud(
     }
     val networkLabel = if (isConnected) "ONLINE" else "OFFLINE"
     val networkColor = if (isConnected) RetroColors.Success else RetroColors.Error
-    val thresholdsText = governanceParams?.let {
-        "Thresholds — Link ${formatBasisPoints(it.linkThreshold)}, Primary ${formatBasisPoints(it.primaryThreshold)}, Duplicate ${formatBasisPoints(it.duplicateThreshold)}"
-    } ?: "Thresholds — governance parameters not loaded."
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         shape = RoundedCornerShape(8.dp),
         color = RetroColors.NESDarkGray.copy(alpha = 0.85f),
-        tonalElevation = 6.dp,
-        border = BorderStroke(2.dp, RetroColors.BorderColor)
+        tonalElevation = 4.dp,
+        border = BorderStroke(1.dp, RetroColors.BorderColor)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = "Wallet",
                         style = RetroTypography.caption,
@@ -537,84 +556,124 @@ private fun IdentityCityHud(
                         color = RetroColors.NESWhite
                     )
                 }
-
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    horizontalAlignment = Alignment.End
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = "Network",
+                        text = "Network $networkLabel",
                         style = RetroTypography.caption,
-                        color = RetroColors.NESGray
-                    )
-                    Text(
-                        text = networkLabel,
-                        style = RetroTypography.button,
                         color = networkColor
                     )
                     Text(
-                        text = "Tier: ${formatTier(tier)}",
+                        text = "Tier ${formatTier(tier)}",
                         style = RetroTypography.caption,
                         color = getIdentityTierColor(tier)
                     )
                 }
             }
-
-            Divider(color = RetroColors.NESGray.copy(alpha = 0.4f))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                HudStat(
-                    label = "Voting Weight",
-                    value = votingDisplay,
-                    valueColor = RetroColors.Oracle,
-                    modifier = Modifier.weight(1f)
-                )
-                HudStat(
-                    label = "Reputation",
-                    value = reputationText,
-                    valueColor = RetroColors.PrimaryID,
-                    modifier = Modifier.weight(1f)
-                )
-                HudStat(
-                    label = "KNOW Balance",
-                    value = knowBalanceText,
-                    valueColor = RetroColors.LinkedID,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                HudStat(
-                    label = "Linked IDs",
-                    value = linkedIds.toString(),
-                    valueColor = RetroColors.LinkedID,
-                    modifier = Modifier.weight(1f)
-                )
-                HudStat(
-                    label = "Vouches (given / received)",
-                    value = "$vouchesGiven / $vouchesReceived",
-                    valueColor = RetroColors.NESWhite,
-                    modifier = Modifier.weight(1f)
-                )
-                HudStat(
-                    label = "Active Claims",
-                    value = activeCount.toString() + if (underChallenge) " (challenge)" else "",
-                    valueColor = activeClaimsColor,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Text(
-                text = thresholdsText,
-                style = RetroTypography.caption,
-                color = RetroColors.NESGray
+            Spacer(modifier = Modifier.height(4.dp))
+            val chips = listOf(
+                Triple("Vote", votingDisplay, RetroColors.Oracle),
+                Triple("Rep", reputationText, RetroColors.PrimaryID),
+                Triple("KNOW", knowBalanceText, RetroColors.LinkedID),
+                Triple("Linked", linkedIds.toString(), RetroColors.LinkedID),
+                Triple("Vouches", "$vouchesGiven / $vouchesReceived", RetroColors.NESWhite),
+                Triple("Active", activeCount.toString(), activeClaimsColor)
             )
+            chips.chunked(3).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    row.forEach { (label, value, color) ->
+                        StatChip(label, value, color)
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+            if (underChallenge) {
+                Text(
+                    text = "⚠ Challenges pending this turn.",
+                    style = RetroTypography.caption,
+                    color = RetroColors.Warning
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TurnController(
+    turnNumber: Int,
+    onAdvanceTurn: () -> Unit,
+    logEntries: List<TurnLogEntry>,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(2.dp, RetroColors.BorderColor, RoundedCornerShape(6.dp))
+            .background(RetroColors.WindowBackground, RoundedCornerShape(6.dp))
+            .padding(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Turn $turnNumber",
+                    style = RetroTypography.heading,
+                    color = RetroColors.LinkedID
+                )
+                Text(
+                    text = "Advance time to process claims, distribute rewards, and spawn NPC actions.",
+                    style = RetroTypography.caption,
+                    color = RetroColors.NESGray
+                )
+            }
+            Button(
+                onClick = onAdvanceTurn,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = RetroColors.PrimaryID,
+                    contentColor = RetroColors.NESWhite
+                ),
+                shape = RoundedCornerShape(6.dp)
+            ) {
+                Text("Advance Turn", style = RetroTypography.button)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 120.dp)
+                .border(1.dp, RetroColors.NESDarkGray, RoundedCornerShape(4.dp))
+                .background(RetroColors.NESBlack.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                .padding(8.dp)
+        ) {
+            if (logEntries.isEmpty()) {
+                Text(
+                    text = "No events yet. Advance a turn to kick off the simulation.",
+                    style = RetroTypography.caption,
+                    color = RetroColors.NESGray
+                )
+            } else {
+                LazyColumn {
+                    items(logEntries.takeLast(8)) { entry ->
+                        Text(
+                            text = "Turn ${entry.turn}: ${entry.message}",
+                            style = RetroTypography.caption,
+                            color = RetroColors.NESWhite
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                }
+            }
         }
     }
 }
@@ -640,6 +699,23 @@ private fun HudStat(
             style = RetroTypography.heading,
             color = valueColor
         )
+    }
+}
+
+@Composable
+private fun StatChip(label: String, value: String, color: Color) {
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.5f)),
+        color = RetroColors.WindowBackground.copy(alpha = 0.4f)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(label.uppercase(), style = RetroTypography.caption, color = RetroColors.NESGray)
+            Text(value.ifEmpty { "--" }, style = RetroTypography.button, color = color)
+        }
     }
 }
 
@@ -687,6 +763,83 @@ private fun MiniMap(
             radius = tileSizePx * 0.4f,
             center = Offset(playerPosition.x * tileSizePx, playerPosition.y * tileSizePx)
         )
+    }
+}
+
+@Composable
+private fun MiniMapCard(
+    mapData: List<String>,
+    playerPosition: Offset,
+    activeSpot: CitySpot?,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        color = RetroColors.NESDarkGray.copy(alpha = 0.85f),
+        tonalElevation = 6.dp,
+        border = BorderStroke(1.dp, RetroColors.BorderColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Mini Map",
+                style = RetroTypography.caption,
+                color = RetroColors.NESWhite
+            )
+            MiniMap(
+                mapData = mapData,
+                playerPosition = playerPosition,
+                activeSpot = activeSpot
+            )
+        }
+    }
+}
+
+@Composable
+private fun SpotActionPanel(
+    spot: CitySpot,
+    actions: List<Pair<String, () -> Unit>>,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        color = RetroColors.WindowBackground.copy(alpha = 0.95f),
+        border = BorderStroke(1.dp, spot.color),
+        tonalElevation = 6.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = spot.title.uppercase(Locale.getDefault()),
+                style = RetroTypography.caption,
+                color = spot.color
+            )
+            actions.forEach { (label, action) ->
+                Button(
+                    onClick = action,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = spot.color.copy(alpha = 0.8f),
+                        contentColor = RetroColors.NESBlack
+                    ),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(label, style = RetroTypography.button)
+                }
+            }
+            Text(
+                text = "Press ENTER to trigger the first action.",
+                style = RetroTypography.caption,
+                color = RetroColors.NESGray
+            )
+        }
     }
 }
 
@@ -791,6 +944,39 @@ private fun shadeColor(color: Color, factor: Float): Color {
     )
 }
 
+private fun distance(a: Offset, b: Offset): Float {
+    val dx = a.x - b.x
+    val dy = a.y - b.y
+    return sqrt(dx * dx + dy * dy)
+}
+
+private fun simulateNpcTurn(turn: Int): List<String> {
+    val rng = Random(turn)
+    val events = mutableListOf<String>()
+    val shuffled = npcAgents.shuffled(rng)
+    shuffled.take(rng.nextInt(2, npcAgents.size)).forEach { agent ->
+        val action = when (agent.role) {
+            NpcRole.PRIMARY -> if (rng.nextBoolean()) {
+                "submitted a new linked ID request."
+            } else {
+                "vouched on an open claim."
+            }
+            NpcRole.ORACLE -> if (rng.nextBoolean()) {
+                "opened a duplicate investigation."
+            } else {
+                "boosted quorum on a pending primary claim."
+            }
+            NpcRole.CHALLENGER -> "staked KNOW to challenge a suspicious address."
+            NpcRole.SYBIL -> "attempted to sneak in a fake claim."
+        }
+        events += "${agent.name} ${action}"
+    }
+    if (rng.nextInt(100) < 15) {
+        events += "System audit uncovered inconsistent votes; cooldown applied."
+    }
+    return events
+}
+
 private fun findNearbyCitySpot(position: Offset, spots: List<CitySpot>, radius: Float = 0.75f): CitySpot? {
     val radiusSquared = radius * radius
     var closest: CitySpot? = null
@@ -839,6 +1025,44 @@ private val demoEnemies = listOf(
     Enemy(position = Offset(2.5f, 6.5f), color = RetroColors.PrimaryID)
 )
 
+private val npcAgents = listOf(
+    NpcAgent("Astra", NpcRole.ORACLE),
+    NpcAgent("Kento", NpcRole.PRIMARY),
+    NpcAgent("Mira", NpcRole.CHALLENGER),
+    NpcAgent("Glim", NpcRole.SYBIL),
+    NpcAgent("Nova", NpcRole.PRIMARY)
+)
+
+class WorldState {
+    var turn by mutableStateOf(1)
+    val log = mutableStateListOf<TurnLogEntry>()
+    val encounters = mutableStateListOf(
+        EncounterRoom("enc_oracle", "Review a high-priority claim", Offset(2.5f, 3.5f)),
+        EncounterRoom("enc_challenge", "Investigate duplicate evidence", Offset(6.5f, 5.5f)),
+        EncounterRoom("enc_network", "Link a new identity shard", Offset(4.5f, 7.5f))
+    )
+
+    fun logEvent(message: String, turnOverride: Int? = null) {
+        val entry = TurnLogEntry(turnOverride ?: turn, message)
+        log += entry
+        while (log.size > 32) {
+            log.removeAt(0)
+        }
+    }
+
+    fun advanceTurn() {
+        turn += 1
+        val events = simulateNpcTurn(turn)
+        if (events.isEmpty()) {
+            logEvent("Quiet turn. Parameters holding steady.", turn)
+        } else {
+            events.forEach { logEvent(it, turn) }
+        }
+        // refresh unresolved encounters occasionally
+        encounters.forEach { if (it.resolved && turn % 3 == 0) it.resolved = false }
+    }
+}
+
 enum class Screen {
     TITLE,
     IDENTITY_STATUS,
@@ -857,6 +1081,7 @@ enum class Screen {
 fun MainScreen() {
     val viewModel = remember { com.knomee.identity.viewmodel.IdentityViewModel() }
     var currentScreen by remember { mutableStateOf(Screen.TITLE) }
+    val worldState = remember { WorldState() }
 
     // Use blockchain state from ViewModel
     val currentTier = viewModel.currentTier
@@ -899,6 +1124,12 @@ fun MainScreen() {
                 )
                 Screen.IDENTITY_CITY -> IdentityCityScreen(
                     onBack = { currentScreen = Screen.TITLE },
+                    worldState = worldState,
+                    onOpenActiveClaims = { currentScreen = Screen.ACTIVE_CLAIMS },
+                    onOpenChallenge = {
+                        currentScreen = Screen.CLAIM_VERIFICATION
+                    },
+                    onOpenVouchSystem = { currentScreen = Screen.VOUCH_SYSTEM },
                     tier = currentTier,
                     address = currentAddress,
                     identityData = viewModel.identityData,
@@ -939,7 +1170,8 @@ fun MainScreen() {
                     onBack = { currentScreen = Screen.TITLE }
                 )
                 Screen.FIRST_PERSON -> FirstPersonDemoScreen(
-                    onBack = { currentScreen = Screen.TITLE }
+                    onBack = { currentScreen = Screen.TITLE },
+                    worldState = worldState
                 )
                 Screen.SETTINGS -> SettingsScreen(
                     isConnected = isConnected,
@@ -1110,6 +1342,10 @@ fun TitleScreen(onNavigate: (Screen) -> Unit) {
 @Composable
 fun IdentityCityScreen(
     onBack: () -> Unit,
+    worldState: WorldState,
+    onOpenActiveClaims: () -> Unit,
+    onOpenChallenge: () -> Unit,
+    onOpenVouchSystem: () -> Unit,
     tier: String,
     address: String?,
     identityData: IdentityData?,
@@ -1263,6 +1499,11 @@ fun IdentityCityScreen(
         }
     }
 
+    fun runSpotAction(spot: CitySpot, label: String, action: () -> Unit) {
+        action()
+        worldState.logEvent("You selected \"$label\" at ${spot.title}.")
+    }
+
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -1303,41 +1544,46 @@ fun IdentityCityScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        IdentityCityHud(
-            tier = tier,
-            address = address,
-            identityData = identityData,
-            knomeeBalance = knomeeBalance,
-            votingWeight = votingWeight,
-            activeClaims = activeClaims,
-            governanceParams = governanceParams,
-            isConnected = isConnected
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        BoxWithConstraints(
+        Row(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            contentAlignment = Alignment.Center
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            val availableWidth = maxWidth
-            val availableHeight = maxHeight
-            val boardWidth = if (availableWidth < availableHeight * GOLDEN_RATIO.toFloat()) {
-                availableWidth
-            } else {
-                availableHeight * GOLDEN_RATIO.toFloat()
-            }
-            val boardHeight = boardWidth / GOLDEN_RATIO.toFloat()
-            val boardModifier = Modifier
-                .size(boardWidth, boardHeight)
-                .border(3.dp, RetroColors.BorderColor, RoundedCornerShape(6.dp))
-                .background(RetroColors.NESBlack, RoundedCornerShape(6.dp))
-
-            Box(
-                modifier = boardModifier
+            BoxWithConstraints(
+                modifier = Modifier
+                    .weight(0.72f)
+                    .fillMaxHeight(),
+                contentAlignment = Alignment.Center
             ) {
+                val availableWidth = maxWidth
+                val availableHeight = maxHeight
+                val boardWidth = if (availableWidth < availableHeight * GOLDEN_RATIO.toFloat()) {
+                    availableWidth
+                } else {
+                    availableHeight * GOLDEN_RATIO.toFloat()
+                }
+                val boardHeight = boardWidth / GOLDEN_RATIO.toFloat()
+                val boardModifier = Modifier
+                    .size(boardWidth, boardHeight)
+                    .border(3.dp, RetroColors.BorderColor, RoundedCornerShape(6.dp))
+                    .background(RetroColors.NESBlack, RoundedCornerShape(6.dp))
+
+                Box(
+                    modifier = boardModifier
+                ) {
+                    val actionsForSpot: (CitySpot) -> List<Pair<String, () -> Unit>> = { spot ->
+                        val baseActions = when (spot.id) {
+                            "oracle_tower" -> listOf("Review Active Claims" to onOpenActiveClaims)
+                        "challenge_pillar" -> listOf("Open Challenge Workflow" to onOpenChallenge)
+                        "network_node" -> listOf("Open Vouch System" to onOpenVouchSystem)
+                        else -> emptyList()
+                    }
+                    baseActions.map { (label, handler) ->
+                        label to { runSpotAction(spot, label, handler) }
+                    }
+                }
+
                 Canvas(
                     modifier = Modifier
                         .fillMaxSize()
@@ -1370,10 +1616,23 @@ fun IdentityCityScreen(
                                     true
                                 }
                                 ComposeKey.Enter -> {
-                                    if (event.type == KeyEventType.KeyDown && dialogueSpot != null) {
-                                        dialogueSpot = null
+                                    if (event.type == KeyEventType.KeyDown) {
+                                        val targetSpot = dialogueSpot ?: activeSpot
+                                        val actions = targetSpot?.let { actionsForSpot(it) }.orEmpty()
+                                        if (actions.isNotEmpty()) {
+                                            actions.first().second()
+                                            dialogueSpot = null
+                                            focusRequester.requestFocus()
+                                            true
+                                        } else if (dialogueSpot != null) {
+                                            dialogueSpot = null
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    } else {
+                                        true
                                     }
-                                    true
                                 }
                                 ComposeKey.Escape -> {
                                     if (event.type == KeyEventType.KeyUp && dialogueSpot != null) {
@@ -1527,12 +1786,25 @@ fun IdentityCityScreen(
                     }
                 }
 
-                dialogueSpot?.let { spot ->
-                    Surface(
+                val inlineSpot = activeSpot
+                val inlineActions = inlineSpot?.let { actionsForSpot(it) }.orEmpty()
+                if (inlineSpot != null && dialogueSpot == null && inlineActions.isNotEmpty()) {
+                    SpotActionPanel(
+                        spot = inlineSpot,
+                        actions = inlineActions,
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(16.dp),
-                        shape = RoundedCornerShape(12.dp),
+                            .align(Alignment.TopStart)
+                            .padding(16.dp)
+                            .widthIn(max = 220.dp)
+                    )
+                }
+
+                dialogueSpot?.let { spot ->
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp),
+                shape = RoundedCornerShape(12.dp),
                         color = RetroColors.WindowBackground.copy(alpha = 0.96f),
                         tonalElevation = 12.dp,
                         border = BorderStroke(2.dp, spot.color)
@@ -1553,6 +1825,22 @@ fun IdentityCityScreen(
                                 style = RetroTypography.body,
                                 color = RetroColors.NESWhite
                             )
+                            val contextualActions = actionsForSpot(spot)
+                            if (contextualActions.isNotEmpty()) {
+                                contextualActions.forEach { (label, action) ->
+                                    Button(
+                                        onClick = action,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = spot.color.copy(alpha = 0.8f),
+                                            contentColor = RetroColors.NESBlack
+                                        ),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text(label, style = RetroTypography.button)
+                                    }
+                                }
+                            }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1601,32 +1889,41 @@ fun IdentityCityScreen(
                         )
                     }
                 }
+            }
+            }
 
-                Surface(
+            Column(
+                modifier = Modifier
+                    .weight(0.28f)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                IdentityCityHud(
+                    tier = tier,
+                    address = address,
+                    identityData = identityData,
+                    knomeeBalance = knomeeBalance,
+                    votingWeight = votingWeight,
+                    activeClaims = activeClaims,
+                    governanceParams = governanceParams,
+                    isConnected = isConnected,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                TurnController(
+                    turnNumber = worldState.turn,
+                    onAdvanceTurn = { worldState.advanceTurn() },
+                    logEntries = worldState.log,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                MiniMapCard(
+                    mapData = mapData,
+                    playerPosition = playerPosition,
+                    activeSpot = activeSpot,
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(16.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    color = RetroColors.NESDarkGray.copy(alpha = 0.85f),
-                    tonalElevation = 6.dp
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Mini Map",
-                            style = RetroTypography.caption,
-                            color = RetroColors.NESWhite
-                        )
-                        MiniMap(
-                            mapData = mapData,
-                            playerPosition = playerPosition,
-                            activeSpot = activeSpot
-                        )
-                    }
-                }
+                        .fillMaxWidth()
+                        .heightIn(min = 160.dp)
+                )
+                Spacer(modifier = Modifier.weight(1f))
             }
         }
 
@@ -1652,11 +1949,18 @@ fun IdentityCityScreen(
     }
 }
 @Composable
-fun FirstPersonDemoScreen(onBack: () -> Unit) {
+fun FirstPersonDemoScreen(onBack: () -> Unit, worldState: WorldState) {
     val focusRequester = remember { FocusRequester() }
     val pressedKeys = remember { mutableStateMapOf<ComposeKey, Boolean>() }
     var playerPosition by remember { mutableStateOf(Offset(3.5f, 3.5f)) }
     var playerAngle by remember { mutableStateOf(0f) }
+    var activeEncounter by remember { mutableStateOf<EncounterRoom?>(null) }
+    val wanderRng = remember { Random(System.currentTimeMillis()) }
+    val enemies = remember {
+        mutableStateListOf<Enemy>().apply {
+            addAll(demoEnemies.map { it.copy(position = it.position) })
+        }
+    }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -1737,7 +2041,37 @@ fun FirstPersonDemoScreen(onBack: () -> Unit) {
 
             playerAngle = newAngle
             playerPosition = newPosition
+
+            val encounter = worldState.encounters.firstOrNull { room ->
+                !room.resolved && distance(room.position, newPosition) < 0.9f
+            }
+            activeEncounter = encounter
+
+            enemies.forEach { enemy ->
+                val jitter = Offset(
+                    (wanderRng.nextFloat() - 0.5f) * deltaSeconds * 0.6f,
+                    (wanderRng.nextFloat() - 0.5f) * deltaSeconds * 0.6f
+                )
+                val candidate = enemy.position + jitter
+                if (!collidesWithWall(candidate.x, enemy.position.y)) {
+                    enemy.position = enemy.position.copy(x = candidate.x)
+                }
+                if (!collidesWithWall(enemy.position.x, candidate.y)) {
+                    enemy.position = enemy.position.copy(y = candidate.y)
+                }
+            }
         }
+    }
+
+    fun resolveEncounter(success: Boolean) {
+        val current = activeEncounter ?: return
+        current.resolved = true
+        if (success) {
+            worldState.logEvent("Resolved encounter: ${current.description}")
+        } else {
+            worldState.logEvent("Skipped encounter: ${current.description}")
+        }
+        activeEncounter = null
     }
 
     Column(
@@ -1778,11 +2112,11 @@ fun FirstPersonDemoScreen(onBack: () -> Unit) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Surface(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
+    Surface(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
             color = RetroColors.NESBlack,
             tonalElevation = 8.dp,
             border = BorderStroke(3.dp, RetroColors.BorderColor)
@@ -1810,14 +2144,24 @@ fun FirstPersonDemoScreen(onBack: () -> Unit) {
                                 updateKey(event.key, event.type == KeyEventType.KeyDown)
                             }
                             ComposeKey.Spacebar -> {
-                                // reserve for future interactions
-                                true
+                                if (activeEncounter != null) {
+                                    resolveEncounter(true)
+                                    true
+                                } else false
                             }
                             ComposeKey.Escape -> {
                                 if (event.type == KeyEventType.KeyUp) {
                                     onBack()
                                 }
                                 true
+                            }
+                            ComposeKey.Enter -> {
+                                if (activeEncounter != null && event.type == KeyEventType.KeyDown) {
+                                    resolveEncounter(true)
+                                    true
+                                } else {
+                                    false
+                                }
                             }
                             else -> false
                         }
@@ -1836,6 +2180,15 @@ fun FirstPersonDemoScreen(onBack: () -> Unit) {
                     topLeft = Offset(0f, halfHeight),
                     size = Size(width, halfHeight)
                 )
+                val tile = 8f
+                for (y in 0 until (halfHeight / tile).toInt()) {
+                    val alpha = 0.08f * (y % 2)
+                    drawRect(
+                        color = RetroColors.NESGray.copy(alpha = alpha),
+                        topLeft = Offset(0f, halfHeight + y * tile),
+                        size = Size(width, tile)
+                    )
+                }
 
                 val dirX = cos(playerAngle)
                 val dirY = sin(playerAngle)
@@ -1937,17 +2290,22 @@ fun FirstPersonDemoScreen(onBack: () -> Unit) {
                 }
 
                 // Render enemies (billboard sprites)
-                val sortedEnemies = demoEnemies.sortedByDescending { enemy ->
-                    val dx = enemy.position.x - playerPosition.x
-                    val dy = enemy.position.y - playerPosition.y
+                val invDet = 1f / (planeX * dirY - dirX * planeY)
+
+                val spriteEntities = buildList {
+                    enemies.forEach { add(it.position to it.color) }
+                    worldState.encounters.filter { !it.resolved }.forEach {
+                        add(it.position to RetroColors.Info)
+                    }
+                }.sortedByDescending { (pos, _) ->
+                    val dx = pos.x - playerPosition.x
+                    val dy = pos.y - playerPosition.y
                     dx * dx + dy * dy
                 }
 
-                val invDet = 1f / (planeX * dirY - dirX * planeY)
-
-                sortedEnemies.forEach { enemy ->
-                    val spriteX = enemy.position.x - playerPosition.x
-                    val spriteY = enemy.position.y - playerPosition.y
+                spriteEntities.forEach { (pos, spriteColor) ->
+                    val spriteX = pos.x - playerPosition.x
+                    val spriteY = pos.y - playerPosition.y
 
                     val transformX = invDet * (dirY * spriteX - dirX * spriteY)
                     val transformY = invDet * (-planeY * spriteX + planeX * spriteY)
@@ -1965,12 +2323,12 @@ fun FirstPersonDemoScreen(onBack: () -> Unit) {
 
                     val centerColumn = ((spriteScreenX / columnWidth).toInt()).coerceIn(0, rayCount - 1)
                     if (transformY < depthBuffer[centerColumn]) {
-                        val spriteColor = shadeColor(enemy.color, (1.2f / transformY).coerceIn(0.35f, 1f))
-                        drawRoundRect(
-                            color = spriteColor,
-                            topLeft = Offset(drawStartX, drawStartY),
-                            size = Size(drawEndX - drawStartX, drawEndY - drawStartY),
-                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(spriteWidth * 0.25f, spriteWidth * 0.25f)
+                    val spriteColor = shadeColor(spriteColor, (1.2f / transformY).coerceIn(0.35f, 1f))
+                    drawRoundRect(
+                        color = spriteColor,
+                        topLeft = Offset(drawStartX, drawStartY),
+                        size = Size(drawEndX - drawStartX, drawEndY - drawStartY),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(spriteWidth * 0.25f, spriteWidth * 0.25f)
                         )
                         drawCircle(
                             color = RetroColors.NESWhite.copy(alpha = 0.6f),
@@ -2007,6 +2365,60 @@ fun FirstPersonDemoScreen(onBack: () -> Unit) {
         )
 
         Spacer(modifier = Modifier.height(8.dp))
+
+        activeEncounter?.let { encounter ->
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(12.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = RetroColors.WindowBackground.copy(alpha = 0.95f),
+                border = BorderStroke(1.dp, RetroColors.Info)
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Encounter",
+                        style = RetroTypography.heading,
+                        color = RetroColors.Info
+                    )
+                    Text(
+                        text = encounter.description,
+                        style = RetroTypography.body,
+                        color = RetroColors.NESWhite
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { resolveEncounter(true) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = RetroColors.Success,
+                                contentColor = RetroColors.NESBlack
+                            )
+                        ) {
+                            Text("Approve", style = RetroTypography.button)
+                        }
+                        Button(
+                            onClick = { resolveEncounter(false) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = RetroColors.Warning,
+                                contentColor = RetroColors.NESBlack
+                            )
+                        ) {
+                            Text("Skip", style = RetroTypography.button)
+                        }
+                    }
+                    Text(
+                        text = "Press SPACE/ENTER to approve instantly.",
+                        style = RetroTypography.caption,
+                        color = RetroColors.NESGray
+                    )
+                }
+            }
+        }
     }
 }
 
