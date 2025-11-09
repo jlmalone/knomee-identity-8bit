@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.knomee.identity.theme.RetroColors
 import com.knomee.identity.theme.RetroTypography
 import com.knomee.identity.utils.ValidationUtils
-import com.knomee.identity.utils.logger
+import com.knomee.identity.utils.LoggerInstance
 import kotlinx.coroutines.delay
 import java.math.BigInteger
 
@@ -169,7 +169,7 @@ fun InteractionMenu(
     playerKNOW: BigInteger?,
     modifier: Modifier = Modifier
 ) {
-    val log = logger("InteractionMenu")
+    val log = LoggerInstance("InteractionMenu")
     val currentNode = remember(currentNodeId) {
         npc.dialogue.find { it.id == currentNodeId } ?: npc.dialogue.first()
     }

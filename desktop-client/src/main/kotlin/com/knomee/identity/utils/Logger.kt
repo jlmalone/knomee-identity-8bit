@@ -62,11 +62,18 @@ object Logger {
 }
 
 /**
- * Extension function to create a logger for a class
+ * Logger instance for a specific tag/class
  */
-fun Any.logger(tag: String = this::class.simpleName ?: "Unknown") = object {
+class LoggerInstance(private val tag: String) {
     fun debug(message: String) = Logger.debug(tag, message)
     fun info(message: String) = Logger.info(tag, message)
     fun warn(message: String, throwable: Throwable? = null) = Logger.warn(tag, message, throwable)
     fun error(message: String, throwable: Throwable? = null) = Logger.error(tag, message, throwable)
+}
+
+/**
+ * Extension function to create a logger for a class
+ */
+fun Any.logger(tag: String = this::class.simpleName ?: "Unknown"): LoggerInstance {
+    return LoggerInstance(tag)
 }

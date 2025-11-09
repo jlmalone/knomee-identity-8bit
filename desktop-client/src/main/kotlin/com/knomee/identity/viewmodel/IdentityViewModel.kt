@@ -453,6 +453,52 @@ class IdentityViewModel {
     }
 
     /**
+     * Challenge a duplicate/Sybil identity
+     */
+    fun challengeDuplicate(suspectedAddress: String, stakeEth: Double) {
+        val consensusAddress = web3Service?.consensusAddress
+        if (consensusAddress.isNullOrEmpty()) {
+            errorMessage = "Consensus contract not configured"
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                isTransactionPending = true
+                transactionStatus = "Submitting duplicate challenge..."
+
+                val stakeWei = (stakeEth * 1e18).toBigDecimal().toBigInteger()
+                val justification = "Suspected Sybil/duplicate identity detected"
+                val result = transactionService?.challengeDuplicate(
+                    consensusAddress,
+                    suspectedAddress,
+                    justification,
+                    stakeWei
+                )
+
+                when (result) {
+                    is TransactionResult.Success -> {
+                        transactionStatus = "Challenge submitted! TX: ${result.txHash.take(10)}..."
+                        loadActiveClaims()
+                    }
+                    is TransactionResult.Error -> {
+                        errorMessage = result.message
+                        transactionStatus = null
+                    }
+                    else -> {
+                        transactionStatus = "Transaction pending..."
+                    }
+                }
+            } catch (e: Exception) {
+                errorMessage = "Challenge failed: ${e.message}"
+                transactionStatus = null
+            } finally {
+                isTransactionPending = false
+            }
+        }
+    }
+
+    /**
      * Claim rewards from a resolved claim
      */
     fun claimRewards(claimId: BigInteger) {

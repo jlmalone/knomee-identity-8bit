@@ -62,7 +62,7 @@ private data class SpotInfo(
     val color: Color
 )
 
-private data class PixelArt(
+data class PixelArt(
     val rows: List<String>,
     val palette: Map<Char, Color>
 )
@@ -94,7 +94,7 @@ private data class Enemy(
     val color: Color
 )
 
-private data class TurnLogEntry(val turn: Int, val message: String)
+data class TurnLogEntry(val turn: Int, val message: String)
 
 private data class NpcAgent(val name: String, val role: NpcRole)
 
