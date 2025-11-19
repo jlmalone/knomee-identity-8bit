@@ -20,6 +20,8 @@ object RetroColors {
     val NESWhite = Color(0xFFFFFFFF)
     val NESGray = Color(0xFF7C7C7C)
     val NESDarkGray = Color(0xFF3C3C3C)
+    val NESYellow = Color(0xFFFCE020)      // NES yellow
+    val NESSkyBlue = Color(0xFF3CBCFC)     // NES sky blue/cyan
 
     // Identity Tier Colors (NES-inspired)
     val GreyGhost = Color(0xFF9D9D9D)        // Gray ghost - unverified

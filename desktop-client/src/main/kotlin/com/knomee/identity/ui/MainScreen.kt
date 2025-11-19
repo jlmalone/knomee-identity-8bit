@@ -62,15 +62,12 @@ private data class SpotInfo(
     val color: Color
 )
 
-data class PixelArt(
-    val rows: List<String>,
-    val palette: Map<Char, Color>
-)
+// PixelArt is defined in IdentityVillage.kt as internal and shared across files
 
 private const val SPRITE_SCALE = 2
 private const val GOLDEN_RATIO = 1.61803398875f
 
-private data class TileInfo(
+private data class CityTileInfo(
     val fill: Color,
     val border: Color? = null,
     val blocking: Boolean = false,
@@ -121,7 +118,7 @@ private enum class SoundEffect {
     INTERACT
 }
 
-private val defaultTileInfo = TileInfo(
+private val defaultTileInfo = CityTileInfo(
     fill = RetroColors.ScreenBackground,
     border = null,
     blocking = false,
@@ -341,25 +338,25 @@ private val dockSprite = PixelArt(
 
 private val identityCityLegend = mapOf(
     '.' to defaultTileInfo.copy(sprite = plazaSprite),
-    '#' to TileInfo(
+    '#' to CityTileInfo(
         fill = RetroColors.NESDarkGray,
         border = RetroColors.NESGray,
         blocking = true,
         sprite = wallSprite
     ),
-    'B' to TileInfo(
+    'B' to CityTileInfo(
         fill = RetroColors.WindowBackground,
         border = RetroColors.NESGray,
         blocking = true,
         sprite = buildingSprite
     ),
-    '~' to TileInfo(
+    '~' to CityTileInfo(
         fill = RetroColors.LinkedID.copy(alpha = 0.35f),
         border = RetroColors.LinkedID,
         blocking = false,
         sprite = bridgeSprite
     ),
-    'O' to TileInfo(
+    'O' to CityTileInfo(
         fill = RetroColors.Oracle.copy(alpha = 0.25f),
         border = RetroColors.Oracle,
         blocking = false,
@@ -371,7 +368,7 @@ private val identityCityLegend = mapOf(
         ),
         sprite = oracleSprite
     ),
-    'H' to TileInfo(
+    'H' to CityTileInfo(
         fill = RetroColors.WindowBackground,
         border = RetroColors.LinkedID,
         blocking = false,
@@ -383,7 +380,7 @@ private val identityCityLegend = mapOf(
         ),
         sprite = guildSprite
     ),
-    'P' to TileInfo(
+    'P' to CityTileInfo(
         fill = RetroColors.Error.copy(alpha = 0.25f),
         border = RetroColors.Error,
         blocking = false,
@@ -395,7 +392,7 @@ private val identityCityLegend = mapOf(
         ),
         sprite = pillarSprite
     ),
-    'N' to TileInfo(
+    'N' to CityTileInfo(
         fill = RetroColors.Info.copy(alpha = 0.25f),
         border = RetroColors.Info,
         blocking = false,
@@ -407,7 +404,7 @@ private val identityCityLegend = mapOf(
         ),
         sprite = networkSprite
     ),
-    'S' to TileInfo(
+    'S' to CityTileInfo(
         fill = RetroColors.PrimaryID.copy(alpha = 0.2f),
         border = RetroColors.PrimaryID,
         blocking = false,
@@ -419,7 +416,7 @@ private val identityCityLegend = mapOf(
         ),
         sprite = stageSprite
     ),
-    'K' to TileInfo(
+    'K' to CityTileInfo(
         fill = RetroColors.BorderColor.copy(alpha = 0.25f),
         border = RetroColors.BorderColor,
         blocking = false,
@@ -431,7 +428,7 @@ private val identityCityLegend = mapOf(
         ),
         sprite = kioskSprite
     ),
-    'G' to TileInfo(
+    'G' to CityTileInfo(
         fill = RetroColors.GreyGhost.copy(alpha = 0.25f),
         border = RetroColors.GreyGhost,
         blocking = false,
@@ -443,7 +440,7 @@ private val identityCityLegend = mapOf(
         ),
         sprite = greyGhostSprite
     ),
-    'T' to TileInfo(
+    'T' to CityTileInfo(
         fill = RetroColors.Success.copy(alpha = 0.25f),
         border = RetroColors.Success,
         blocking = false,
@@ -455,7 +452,7 @@ private val identityCityLegend = mapOf(
         ),
         sprite = teleportSprite
     ),
-    'D' to TileInfo(
+    'D' to CityTileInfo(
         fill = RetroColors.Warning.copy(alpha = 0.25f),
         border = RetroColors.Warning,
         blocking = false,
@@ -919,7 +916,7 @@ private fun DrawScope.drawPixelArt(sprite: PixelArt, topLeft: Offset, tileSizePx
     }
 }
 
-private fun tileInfoFor(char: Char): TileInfo = identityCityLegend[char] ?: defaultTileInfo
+private fun tileInfoFor(char: Char): CityTileInfo = identityCityLegend[char] ?: defaultTileInfo
 
 private fun isFirstPersonWall(x: Int, y: Int): Boolean {
     if (x !in 0 until firstPersonMapWidth || y !in 0 until firstPersonMapHeight) return true

@@ -51,7 +51,7 @@ import kotlin.math.min
 // DATA MODELS
 // ============================================================================
 
-private data class PixelArt(
+data class PixelArt(
     val rows: List<String>,
     val palette: Map<Char, Color>
 )
