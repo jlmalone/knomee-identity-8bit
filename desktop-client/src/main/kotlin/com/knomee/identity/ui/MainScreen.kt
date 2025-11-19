@@ -1073,6 +1073,7 @@ enum class Screen {
     CLAIM_REWARDS,
     ORACLE_PANEL,
     IDENTITY_CITY,
+    IDENTITY_VILLAGE,
     FIRST_PERSON,
     SETTINGS
 }
@@ -1138,6 +1139,10 @@ fun MainScreen() {
                     activeClaims = viewModel.activeClaims,
                     governanceParams = viewModel.governanceParams,
                     isConnected = isConnected
+                )
+                Screen.IDENTITY_VILLAGE -> IdentityVillageScreen(
+                    viewModel = viewModel,
+                    onBack = { currentScreen = Screen.TITLE }
                 )
                 Screen.IDENTITY_STATUS -> IdentityStatusScreen(
                     tier = currentTier,
@@ -1315,6 +1320,8 @@ fun TitleScreen(onNavigate: (Screen) -> Unit) {
 
         // Menu options
         RetroMenuButton("◆ IDENTITY CITY", onClick = { onNavigate(Screen.IDENTITY_CITY) })
+        Spacer(modifier = Modifier.height(16.dp))
+        RetroMenuButton("◆ IDENTITY VILLAGE", onClick = { onNavigate(Screen.IDENTITY_VILLAGE) })
         Spacer(modifier = Modifier.height(16.dp))
         RetroMenuButton("◆ FIRST PERSON DEMO", onClick = { onNavigate(Screen.FIRST_PERSON) })
         Spacer(modifier = Modifier.height(16.dp))
