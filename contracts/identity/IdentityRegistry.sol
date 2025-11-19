@@ -162,6 +162,26 @@ contract IdentityRegistry is Ownable {
     }
 
     /**
+     * @notice Admin grant Primary ID (for initial setup/testing)
+     * @param addr Address to grant Primary ID status
+     * @dev Use sparingly - normal flow is through consensus voting
+     */
+    function adminGrantPrimaryID(address addr) external onlyOwner {
+        Identity storage identity = identities[addr];
+        require(identity.tier == IdentityTier.GreyGhost, "Already has identity");
+
+        identity.tier = IdentityTier.PrimaryID;
+        identity.verifiedAt = block.timestamp;
+
+        // Mint Identity Token (soul-bound NFT)
+        if (address(identityToken) != address(0)) {
+            identityToken.mintPrimaryID(addr);
+        }
+
+        emit IdentityVerified(addr, IdentityTier.PrimaryID, block.timestamp);
+    }
+
+    /**
      * @notice Grant Oracle status (admin-controlled in Phase 1)
      * @param addr Address to grant Oracle status
      * @dev Future: Will be earned through meritocracy in Phase 3
@@ -173,6 +193,11 @@ contract IdentityRegistry is Ownable {
         IdentityTier oldTier = identity.tier;
         identity.tier = IdentityTier.Oracle;
         identity.oracleGrantedAt = block.timestamp;
+
+        // Upgrade the Identity Token to Oracle level
+        if (address(identityToken) != address(0)) {
+            identityToken.upgradeToOracle(addr);
+        }
 
         emit IdentityUpgraded(addr, oldTier, IdentityTier.Oracle);
     }
