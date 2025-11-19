@@ -1277,6 +1277,13 @@ fun IdentityVillageScreen(
         }
     }
 
+    // Clear pressed keys when dialog opens/closes to prevent stuck keys
+    LaunchedEffect(gameState.activeVillager) {
+        if (gameState.activeVillager != null) {
+            pressedKeys.clear()
+        }
+    }
+
     // Game loop
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -1290,29 +1297,31 @@ fun IdentityVillageScreen(
 
             frameCount++
 
-            // Movement
-            var dx = 0f
-            var dy = 0f
+            // Movement (only if no dialog is open)
+            if (gameState.activeVillager == null) {
+                var dx = 0f
+                var dy = 0f
 
-            if (pressedKeys[ComposeKey.W] == true || pressedKeys[ComposeKey.DirectionUp] == true) dy -= 1f
-            if (pressedKeys[ComposeKey.S] == true || pressedKeys[ComposeKey.DirectionDown] == true) dy += 1f
-            if (pressedKeys[ComposeKey.A] == true || pressedKeys[ComposeKey.DirectionLeft] == true) dx -= 1f
-            if (pressedKeys[ComposeKey.D] == true || pressedKeys[ComposeKey.DirectionRight] == true) dx += 1f
+                if (pressedKeys[ComposeKey.W] == true || pressedKeys[ComposeKey.DirectionUp] == true) dy -= 1f
+                if (pressedKeys[ComposeKey.S] == true || pressedKeys[ComposeKey.DirectionDown] == true) dy += 1f
+                if (pressedKeys[ComposeKey.A] == true || pressedKeys[ComposeKey.DirectionLeft] == true) dx -= 1f
+                if (pressedKeys[ComposeKey.D] == true || pressedKeys[ComposeKey.DirectionRight] == true) dx += 1f
 
-            if (dx != 0f || dy != 0f) {
-                val len = sqrt(dx * dx + dy * dy)
-                dx /= len
-                dy /= len
+                if (dx != 0f || dy != 0f) {
+                    val len = sqrt(dx * dx + dy * dy)
+                    dx /= len
+                    dy /= len
 
-                val speedTilesPerSecond = 4f
-                val candidateX = gameState.playerPosition.x + dx * speedTilesPerSecond * deltaSeconds
-                val candidateY = gameState.playerPosition.y + dy * speedTilesPerSecond * deltaSeconds
+                    val speedTilesPerSecond = 4f
+                    val candidateX = gameState.playerPosition.x + dx * speedTilesPerSecond * deltaSeconds
+                    val candidateY = gameState.playerPosition.y + dy * speedTilesPerSecond * deltaSeconds
 
-                if (isWalkable(candidateX, candidateY, villageLayout)) {
-                    gameState.playerPosition = Offset(candidateX, candidateY)
-                    gameState.trail.add(gameState.playerPosition)
-                    if (gameState.trail.size > 16) {
-                        gameState.trail.removeAt(0)
+                    if (isWalkable(candidateX, candidateY, villageLayout)) {
+                        gameState.playerPosition = Offset(candidateX, candidateY)
+                        gameState.trail.add(gameState.playerPosition)
+                        if (gameState.trail.size > 16) {
+                            gameState.trail.removeAt(0)
+                        }
                     }
                 }
             }
@@ -1424,6 +1433,8 @@ fun IdentityVillageScreen(
                     gameState.activeVillager = null
                     gameState.currentDialogue = null
                     gameState.currentQuestion = null
+                    // Request focus back to game to restore keyboard input
+                    focusRequester.requestFocus()
                 }
             )
         }
