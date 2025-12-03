@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Reputation Matrix: Turn-Based Staking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0d1117; color: #c9d1d9; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #161b22; }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+        .card { background-color: #161b22; border: 1px solid #30363d; }
+        .btn-primary { background-color: #238636; transition: background-color 0.15s; }
+        .btn-primary:hover { background-color: #2ea043; }
+        .input-style { background-color: #0d1117; border: 1px solid #30363d; color: #c9d1d9; }
+        .phase-staking { background-color: #052e16; border-color: #238636; }
+        .phase-evaluation { background-color: #3b0764; border-color: #9333ea; }
+    </style>
+</head>
+<body>
+
+    <div id="app" class="min-h-screen p-4 sm:p-8 flex flex-col items-center">
+        <h1 class="text-3xl sm:text-4xl font-bold mb-6 text-purple-400">The Reputation Matrix: Turn-Based Staking</h1>
+        
+        <!-- Loading & Status -->
+        <div id="loading-indicator" class="text-lg text-yellow-500 mb-4">Initializing Matrix...</div>
+
+        <!-- Global Game State & User Info -->
+        <div class="w-full max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div id="game-state-card" class="card p-4 rounded-xl shadow-lg border-2">
+                <p class="text-sm font-semibold">Game Phase: <span id="game-phase" class="text-lg font-bold">...</span></p>
+                <p class="text-sm font-semibold">Turn: <span id="game-turn" class="text-lg font-bold text-yellow-500">...</span></p>
+                <p class="text-sm font-semibold mt-2">Your Role: <span id="user-role" class="font-bold text-blue-400">Observer</span></p>
+            </div>
+            
+            <div id="user-info-card" class="card p-4 rounded-xl shadow-lg md:col-span-2">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center text-sm">
+                    <div class="text-lg font-bold">Your Budget: <span id="user-budget" class="text-yellow-500">0</span></div>
+                    <p class="mt-2 sm:mt-0">User ID: <span id="user-id-display" class="text-xs text-gray-400 font-mono">...</span></p>
+                </div>
+
+                <!-- NEW: Admin/God Mode Controls -->
+                <div class="mt-4 pt-4 border-t border-gray-700">
+                    <h3 class="text-sm font-bold text-yellow-500 mb-2">Matrix Control Panel (God Mode)</h3>
+                    
+                    <div class="flex flex-wrap gap-4 items-center">
+                        <!-- Role Switcher -->
+                        <div class="flex-grow">
+                            <label for="claim-role-id" class="block text-xs font-medium mb-1 text-gray-400">Claim Entity Role</label>
+                            <select id="claim-role-id" class="w-full p-1 text-sm rounded-lg input-style focus:ring-yellow-500 focus:border-yellow-500"></select>
+                        </div>
+
+                        <!-- God Mode Toggle -->
+                        <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="god-mode-toggle" class="form-checkbox text-yellow-500 h-4 w-4 bg-gray-800 border-gray-600 rounded">
+                            <label for="god-mode-toggle" class="text-sm font-medium text-yellow-500">Enable God Mode</label>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="advance-turn-btn" class="mt-3 w-full p-2 rounded-lg text-white font-bold bg-purple-600 hover:bg-purple-700 disabled:opacity-30 hidden" disabled>
+                    (Agent Action) Advance Turn & Calculate Rewards
+                </button>
+            </div>
+        </div>
+        
+        <!-- Contribution Form -->
+        <div class="w-full max-w-6xl card p-6 mb-8 rounded-xl shadow-lg">
+            <h2 class="text-2xl font-semibold mb-4 text-green-300">Stake on an Address</h2>
+            <form id="contribution-form" class="space-y-4">
+                <div>
+                    <label for="target-address-id" class="block text-sm font-medium mb-1">Target Address (Entity to describe)</label>
+                    <select id="target-address-id" required class="w-full p-2 rounded-lg input-style focus:ring-green-500 focus:border-green-500"></select>
+                </div>
+                <div>
+                    <label for="contribution-text" class="block text-sm font-medium mb-1">Word or Sentence Description</label>
+                    <input type="text" id="contribution-text" required placeholder="e.g., A Mint that only serves the Oracle" class="w-full p-2 rounded-lg input-style focus:ring-green-500 focus:border-green-500">
+                </div>
+                <div>
+                    <label for="contribution-stake" class="block text-sm font-medium mb-1">Stake Amount</label>
+                    <input type="number" id="contribution-stake" required min="1" step="1" placeholder="e.g., 20" class="w-full p-2 rounded-lg input-style focus:ring-green-500 focus:border-green-500">
+                </div>
+                <button type="submit" id="stake-button" class="w-full p-3 rounded-lg text-white font-bold btn-primary disabled:opacity-50" disabled>
+                    Stake Contribution
+                </button>
+            </form>
+            <p id="form-message" class="mt-3 text-sm text-red-400"></p>
+        </div>
+
+        <!-- Entity Dashboard -->
+        <div class="w-full max-w-6xl card p-6 rounded-xl shadow-lg">
+            <h2 class="text-2xl font-semibold mb-4 text-purple-300">Entity Addresses & Collective Identities</h2>
+            <div id="entity-dashboard" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Entities will be rendered here -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, runTransaction, getDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        setLogLevel('Debug');
+
+        // --- GLOBAL VARIABLES (Provided by Canvas) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // --- CORE APPLICATION CONSTANTS & STATE ---
+        const N_DIMENSION = 384; 
+        const DEFAULT_BUDGET = 1000;
+        
+        // Global state for God Mode (client-side toggle)
+        let isGodMode = false;
+
+        // Initial set of stakeable entities (Addresses)
+        const INITIAL_ENTITIES = {
+            'P_001': { label: 'Player 1', type: 'Player' }, 'P_002': { label: 'Player 2', type: 'Player' },
+            'P_003': { label: 'Player 3', type: 'Player' }, 'P_004': { label: 'Player 4', type: 'Player' },
+            'P_005': { label: 'Player 5', type: 'Player' }, 'P_006': { label: 'Player 6', type: 'Player' },
+            'P_007': { label: 'Player 7', type: 'Player' }, 'P_008': { label: 'Player 8', type: 'Player' },
+            
+            'O_MINT_A': { label: 'Minting Oracle A (URL/Address)', type: 'Oracle' },
+            'O_MINT_B': { label: 'Minting Oracle B (Function/Identity)', type: 'Oracle' },
+            'O_REL_A': { label: 'Oracle A (Relationships)', type: 'Oracle' },
+            'O_REL_B': { label: 'Oracle B (Contracts)', type: 'Oracle' },
+
+            'A_WATCH_1': { label: 'Agent Watchdog 1', type: 'Agent' },
+            'A_TIME_2': { label: 'Agent Timekeeper 2', type: 'Agent' },
+        };
+        
+        // Add 32 NPCs with famous actor names
+        const actorNames = [
+            'Tom Hanks', 'Meryl Streep', 'Leonardo DiCaprio', 'Cate Blanchett', 'Denzel Washington', 'Julia Roberts', 'Brad Pitt', 'Nicole Kidman', 
+            'Will Smith', 'Tilda Swinton', 'Robert De Niro', 'Natalie Portman', 'Matt Damon', 'Emma Stone', 'Joaquin Phoenix', 'Viola Davis', 
+            'Christian Bale', 'Scarlett Johansson', 'George Clooney', 'Jennifer Lawrence', 'Ryan Gosling', 'Charlize Theron', 'Idris Elba', 
+            'Amy Adams', 'Chris Evans', 'Gal Gadot', 'Benedict Cumberbatch', 'Saoirse Ronan', 'Michael B. Jordan', 'Zendaya', 
+            'Oscar Isaac', 'Florence Pugh'
+        ];
+        
+        actorNames.forEach((name, index) => {
+            const id = `NPC_${String(index + 1).padStart(2, '0')}`;
+            INITIAL_ENTITIES[id] = { label: name, type: 'NPC' };
+        });
+        
+        let app, db, auth;
+        let userId = null;
+        let gameState = null;
+        
+        const gameStatePath = `artifacts/${appId}/public/data/reputation_matrix`;
+        
+        // --- UTILITY FUNCTIONS FOR VECTOR MATH ---
+
+        /** Simulates the embedding lookup by creating a repeatable vector from text. */
+        const getEmbedding = (text) => {
+            const hash = Array.from(text.toLowerCase()).reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) | 0, 0);
+            const vector = [];
+            for (let i = 0; i < N_DIMENSION; i++) {
+                const seed = (hash + i) % 1000;
+                const value = Math.sin(seed * 0.1) * (1 + Math.cos(seed * 0.5));
+                vector.push(parseFloat(value.toFixed(4)));
+            }
+            return vector;
+        };
+
+        /** Calculates the weighted average vector for a sentence (simulating SIF/TF-IDF). */
+        const createSentenceVector = (text) => {
+            const words = text.toLowerCase().match(/\b\w+\b/g) || [];
+            if (words.length === 0) return Array(N_DIMENSION).fill(0);
+
+            let totalWeight = 0;
+            const finalVector = Array(N_DIMENSION).fill(0);
+
+            words.forEach(word => {
+                const weight = Math.max(1, word.length / 5); 
+                const wordVector = getEmbedding(word);
+                
+                for (let i = 0; i < N_DIMENSION; i++) {
+                    finalVector[i] += wordVector[i] * weight;
+                }
+                totalWeight += weight;
+            });
+
+            if (totalWeight > 0) {
+                return finalVector.map(val => parseFloat((val / totalWeight).toFixed(4)));
+            }
+            return Array(N_DIMENSION).fill(0);
+        };
+
+        /** Calculates the dot product of two vectors. */
+        const dotProduct = (v1, v2) => {
+            if (v1.length !== v2.length) return 0;
+            return v1.reduce((sum, val, i) => sum + (val * v2[i]), 0);
+        };
+
+        /** Calculates the magnitude (L2 norm) of a vector. */
+        const magnitude = (v) => {
+            return Math.sqrt(v.reduce((sum, val) => sum + val * val, 0));
+        };
+
+        /** Calculates the Cosine Similarity (Alignment Score R) between two vectors. */
+        const calculateReward = (v1, v2) => {
+            const dot = dotProduct(v1, v2);
+            const mag1 = magnitude(v1);
+            const mag2 = magnitude(v2);
+
+            if (mag1 === 0 || mag2 === 0) return 0;
+
+            const similarity = Math.max(-1, Math.min(1, dot / (mag1 * mag2)));
+            
+            return parseFloat(((similarity + 1) / 2).toFixed(4));
+        };
+
+        /**
+         * Calculates the single aggregate vector (V_identity) for a given set of contributions.
+         * @param {Array} contributions List of contributions {stake, vector}
+         * @returns {number[]} The new V_identity vector.
+         */
+        const calculateAggregateVector = (contributions) => {
+            const V_final = Array(N_DIMENSION).fill(0);
+            let totalStake = 0;
+
+            contributions.forEach(contribution => {
+                if (contribution.vector && contribution.stake > 0) {
+                    for (let i = 0; i < N_DIMENSION; i++) {
+                        V_final[i] += contribution.vector[i] * contribution.stake;
+                    }
+                    totalStake += contribution.stake;
+                }
+            });
+
+            if (totalStake > 0) {
+                return V_final.map(val => parseFloat((val / totalStake).toFixed(4)));
+            }
+            return Array(N_DIMENSION).fill(0);
+        };
+        
+        // --- GAME CORE LOGIC ---
+
+        const initializeFirebase = async () => {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('user-id-display').textContent = userId;
+                        document.getElementById('loading-indicator').textContent = 'Authenticated. Loading Matrix state...';
+                        listenForGameState();
+
+                        // Setup God Mode Listeners (after auth)
+                        document.getElementById('god-mode-toggle').addEventListener('change', (e) => {
+                            isGodMode = e.target.checked;
+                            renderApp(); // Re-render to update button visibility
+                        });
+                        document.getElementById('claim-role-id').addEventListener('change', claimRole);
+
+                    } else {
+                        console.error("Authentication failed.");
+                    }
+                });
+            } catch (error) {
+                document.getElementById('loading-indicator').textContent = `Initialization Error: ${error.message}`;
+                console.error("Firebase Initialization Error:", error);
+            }
+        };
+
+        const listenForGameState = () => {
+            const gameRef = doc(db, gameStatePath, 'game_state');
+
+            onSnapshot(gameRef, async (docSnap) => {
+                let data = docSnap.data();
+
+                if (!docSnap.exists() || !data.entities) { // Added check for .entities just in case
+                    // Initial setup if game doesn't exist
+                    const initialEntities = {};
+                    Object.entries(INITIAL_ENTITIES).forEach(([id, config]) => {
+                        initialEntities[id] = { ...config, V_identity: Array(N_DIMENSION).fill(0), contributions: [] };
+                    });
+
+                    data = {
+                        phase: 'STAKING', 
+                        turn: 0,
+                        entities: initialEntities,
+                        budgets: {}, 
+                        roleAssignments: {},
+                        turnHistory: {} // Initialize history
+                    };
+                    
+                    // Set the initial document and then re-read it to ensure data consistency
+                    await setDoc(gameRef, data);
+                    // Fetch the fresh snapshot data to ensure 'data' variable is the latest before assignment
+                    data = (await getDoc(gameRef)).data(); 
+                }
+                
+                // Assign the latest data to gameState
+                gameState = data;
+
+                // --- Role & Budget Assignment on Join ---
+                await assignRoleAndBudget(gameRef);
+                
+                document.getElementById('loading-indicator').classList.add('hidden');
+                renderApp();
+            }, (error) => {
+                console.error("Firestore listen failed:", error);
+                document.getElementById('loading-indicator').textContent = 'Error loading Matrix data.';
+            });
+        };
+
+        const assignRoleAndBudget = async (gameRef) => {
+            // Check if gameState is loaded and userId is available
+            if (!gameState || !userId) {
+                console.warn("Attempted to assign role/budget before state was ready.");
+                return;
+            }
+
+            await runTransaction(db, async (transaction) => {
+                const docSnap = await transaction.get(gameRef);
+                
+                // Check if the document exists within the transaction. 
+                if (!docSnap.exists()) {
+                    console.warn("Transaction skipped: Game document not ready/found. Will retry.");
+                    return;
+                }
+                
+                const data = docSnap.data();
+
+                // 1. Assign Role (Player or Agent) - Only assigns the first available role if no role is currently claimed
+                const currentRoles = Object.keys(data.roleAssignments);
+                const roleId = currentRoles.find(key => data.roleAssignments[key] === userId);
+                
+                if (!roleId) {
+                    const availablePlayer = Object.keys(INITIAL_ENTITIES).filter(id => INITIAL_ENTITIES[id].type === 'Player' && !currentRoles.includes(id))[0];
+                    const availableAgent = Object.keys(INITIAL_ENTITIES).filter(id => INITIAL_ENTITIES[id].type === 'Agent' && !currentRoles.includes(id))[0];
+
+                    if (availablePlayer) {
+                        data.roleAssignments[availablePlayer] = userId;
+                        data.entities[availablePlayer].userId = userId;
+                    } else if (availableAgent) {
+                        data.roleAssignments[availableAgent] = userId;
+                        data.entities[availableAgent].userId = userId;
+                    }
+                }
+                
+                // 2. Assign Initial Budget
+                if (data.budgets[userId] === undefined || data.budgets[userId] === null) {
+                    data.budgets[userId] = DEFAULT_BUDGET;
+                }
+                
+                transaction.set(gameRef, data);
+            });
+        };
+
+        /** Allows the user to claim a new entity role via the dropdown. */
+        const claimRole = async (e) => {
+            const newEntityId = e.target.value;
+            if (!newEntityId || !userId) return;
+            
+            // Check if the role is already claimed by someone else (disabled state in dropdown handles most cases)
+            if (gameState.roleAssignments[newEntityId] && gameState.roleAssignments[newEntityId] !== userId) {
+                 document.getElementById('form-message').textContent = `Role ${newEntityId} is already claimed by another user.`;
+                 return;
+            }
+
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const gameRef = doc(db, gameStatePath, 'game_state');
+                    const docSnap = await transaction.get(gameRef);
+                    if (!docSnap.exists()) { throw new Error("Game state not found!"); }
+                    
+                    const data = docSnap.data();
+                    
+                    // 1. Clear current assignment for this user (if any)
+                    const oldEntityId = Object.keys(data.roleAssignments).find(key => data.roleAssignments[key] === userId);
+                    if (oldEntityId) {
+                        delete data.roleAssignments[oldEntityId];
+                        if (data.entities[oldEntityId] && data.entities[oldEntityId].userId === userId) {
+                            delete data.entities[oldEntityId].userId;
+                        }
+                    }
+
+                    // 2. Assign new role
+                    data.roleAssignments[newEntityId] = userId;
+                    data.entities[newEntityId].userId = userId;
+
+                    transaction.set(gameRef, data);
+                    
+                    document.getElementById('form-message').textContent = `Role claimed successfully: ${newEntityId} (${INITIAL_ENTITIES[newEntityId].type}).`;
+                });
+            } catch (e) {
+                console.error("Failed to claim role: ", e);
+                document.getElementById('form-message').textContent = `Error claiming role: ${e.message}`;
+            }
+        }
+
+
+        // --- RENDERING ---
+
+        const renderApp = () => {
+            if (!gameState || !userId) return;
+            
+            // Get user's assigned role
+            const userRoleEntry = Object.entries(gameState.roleAssignments).find(([key, uid]) => uid === userId);
+            const userEntityId = userRoleEntry ? userRoleEntry[0] : null;
+            const userRoleType = userEntityId ? gameState.entities[userEntityId].type : 'Observer';
+            
+            // 1. Update Global State
+            const phaseEl = document.getElementById('game-phase');
+            phaseEl.textContent = gameState.phase;
+            phaseEl.className = `text-lg font-bold uppercase ${gameState.phase === 'STAKING' ? 'text-green-400' : 'text-purple-400'}`;
+            document.getElementById('game-state-card').className = `card p-4 rounded-xl shadow-lg border-2 ${gameState.phase === 'STAKING' ? 'phase-staking' : 'phase-evaluation'}`;
+            document.getElementById('game-turn').textContent = gameState.turn;
+            document.getElementById('user-role').textContent = userRoleType;
+
+            // 2. Update User Info & Agent Control
+            const currentDisplayBudget = gameState.budgets[userId] !== undefined && gameState.budgets[userId] !== null 
+                ? Math.floor(gameState.budgets[userId]) 
+                : 0;
+                
+            document.getElementById('user-budget').textContent = currentDisplayBudget;
+            
+            const advanceBtn = document.getElementById('advance-turn-btn');
+            const advanceMsgEl = document.getElementById('form-message');
+            
+            // God Mode Check: Allows turn advance if role is Agent OR God Mode is enabled.
+            const hasAgentAuthority = userRoleType === 'Agent' || isGodMode;
+
+
+            if (hasAgentAuthority) {
+                advanceBtn.classList.remove('hidden');
+                
+                if (gameState.phase === 'STAKING') {
+                    advanceBtn.textContent = `(Agent Action) 1/2: Calculate Rewards & Enter EVALUATION`;
+                    advanceBtn.disabled = false; 
+                    advanceMsgEl.textContent = 'Staking is open. Click the Agent button when all players are done.';
+                } else if (gameState.phase === 'EVALUATION') {
+                    // UPDATED TEXT: Reflects archiving, not just clearing.
+                    advanceBtn.textContent = `(Agent Action) 2/2: Archive Descriptions & Start Turn ${gameState.turn + 1}`;
+                    advanceBtn.disabled = false;
+                    advanceMsgEl.textContent = `Rewards for Turn ${gameState.turn} have been calculated. Review the budgets, then click to start the next staking phase.`;
+                }
+
+            } else {
+                advanceBtn.classList.add('hidden');
+                // Non-agent message logic
+                if (gameState.phase !== 'STAKING') {
+                    advanceMsgEl.textContent = `Staking is currently closed. Waiting for Agent to advance Turn ${gameState.turn}.`;
+                } else {
+                    advanceMsgEl.textContent = ''; // Clear message when staking is open
+                }
+            }
+            
+            document.getElementById('stake-button').disabled = gameState.phase !== 'STAKING';
+
+
+            // 3. Populate Target Address Dropdown
+            const selectEl = document.getElementById('target-address-id');
+            selectEl.innerHTML = '';
+            Object.entries(gameState.entities).forEach(([id, entity]) => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = `${entity.label} (${id}) - Type: ${entity.type}`;
+                selectEl.appendChild(option);
+            });
+            
+            // 3b. Populate Claim Role Dropdown
+            const claimSelectEl = document.getElementById('claim-role-id');
+            claimSelectEl.innerHTML = '<option value="">-- Select Role --</option>'; // Add default option
+            Object.entries(gameState.entities).forEach(([id, entity]) => {
+                const option = document.createElement('option');
+                option.value = id;
+                const claimedBy = gameState.roleAssignments[id];
+                const isMine = claimedBy === userId;
+
+                if (isMine) {
+                    option.textContent = `✅ ${entity.label} (${id}) - YOUR CURRENT ROLE`;
+                    option.selected = true;
+                } else if (claimedBy) {
+                    option.textContent = `❌ ${entity.label} (${id}) - Claimed by Another`;
+                    option.disabled = true; 
+                } else {
+                    option.textContent = `${entity.label} (${id}) - Available`;
+                }
+                
+                claimSelectEl.appendChild(option);
+            });
+            
+            // 4. Render Entity Dashboard
+            const dashboardEl = document.getElementById('entity-dashboard');
+            dashboardEl.innerHTML = '';
+            
+            Object.entries(gameState.entities).forEach(([id, entity]) => {
+                const totalStake = entity.contributions.reduce((sum, c) => sum + c.stake, 0);
+                const entityCard = document.createElement('div');
+                
+                const isUserRole = id === userEntityId;
+                const borderClass = isUserRole ? 'border-2 border-yellow-500' : '';
+
+                entityCard.className = `card p-4 rounded-xl shadow-lg ${borderClass}`;
+                
+                let lastDescription = "No collective identity staked yet.";
+                if (totalStake > 0) {
+                    // Simple heuristic for showing the "current identity"
+                    const topContribution = entity.contributions.reduce((max, c) => (c.stake > max.stake ? c : max), { stake: 0, text: "" });
+                    lastDescription = `**${topContribution.text}** (Total Stake: ${totalStake})`;
+                }
+
+                entityCard.innerHTML = `
+                    <h3 class="text-xl font-bold ${entity.type === 'Agent' ? 'text-red-400' : entity.type === 'Oracle' ? 'text-green-400' : 'text-blue-400'}">${entity.label}</h3>
+                    <p class="text-xs text-gray-500 mb-2">Address: ${id}</p>
+                    <p class="text-sm font-semibold">Type: ${entity.type} ${isUserRole ? '(You)' : ''}</p>
+                    <p class="text-sm mt-2">Current Identity:</p>
+                    <p class="text-lg italic text-gray-300 truncate">${lastDescription}</p>
+                    <p class="text-xs text-gray-500 mt-2">Contributions: ${entity.contributions.length}</p>
+                `;
+                dashboardEl.appendChild(entityCard);
+            });
+        };
+
+        // --- SUBMISSION HANDLER ---
+
+        document.getElementById('contribution-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (gameState.phase !== 'STAKING') {
+                document.getElementById('form-message').textContent = 'Staking is only allowed during the STAKING phase.';
+                return;
+            }
+
+            const targetAddressId = document.getElementById('target-address-id').value;
+            const textInput = document.getElementById('contribution-text');
+            const stakeInput = document.getElementById('contribution-stake');
+            const messageEl = document.getElementById('form-message');
+            const stakeButton = document.getElementById('stake-button');
+            
+            const text = textInput.value.trim();
+            const stake = parseInt(stakeInput.value, 10);
+            
+            stakeButton.disabled = true;
+            messageEl.textContent = 'Processing contribution...';
+
+            if (!text || stake <= 0 || !userId) {
+                messageEl.textContent = 'Please enter valid text and stake amount.';
+                stakeButton.disabled = false;
+                return;
+            }
+
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const gameRef = doc(db, gameStatePath, 'game_state');
+                    const docSnap = await transaction.get(gameRef);
+                    if (!docSnap.exists()) { throw new Error("Game state not found!"); }
+                    
+                    const data = docSnap.data();
+                    
+                    // Ensure currentBudget is properly initialized within the transaction from the data object
+                    let currentBudget = data.budgets[userId] !== undefined ? data.budgets[userId] : DEFAULT_BUDGET;
+
+                    if (stake > currentBudget) { throw new Error(`Insufficient funds. Available: ${currentBudget}`); }
+                    if (!data.entities[targetAddressId]) { throw new Error("Invalid target address selected."); }
+
+                    // 1. Generate Vector
+                    const V_sentence = createSentenceVector(text);
+
+                    // 2. Prepare new contribution
+                    const newContribution = {
+                        contributorId: userId,
+                        text: text,
+                        stake: stake,
+                        vector: V_sentence,
+                        timestamp: Date.now(),
+                        reward: 0, // Calculated later
+                    };
+
+                    // 3. Update Budgets
+                    data.budgets[userId] = currentBudget - stake;
+
+                    // 4. Add Contribution to Target Entity
+                    data.entities[targetAddressId].contributions.push(newContribution);
+
+                    // 5. Recalculate Target Entity's Identity Vector (V_identity)
+                    data.entities[targetAddressId].V_identity = calculateAggregateVector(data.entities[targetAddressId].contributions);
+
+                    transaction.set(gameRef, data);
+                    
+                    messageEl.textContent = 'Contribution staked and Matrix updated!';
+                    textInput.value = '';
+                    stakeInput.value = '';
+                });
+            } catch (e) {
+                console.error("Transaction failed: ", e);
+                messageEl.textContent = `Error: ${e.message || "Could not stake contribution."}`;
+            } finally {
+                stakeButton.disabled = false;
+            }
+        });
+        
+        // --- AGENT CONTROL (ADVANCE TURN) ---
+        
+        document.getElementById('advance-turn-btn').addEventListener('click', async () => {
+            // Check God Mode Authority here, although the button visibility is handled in renderApp
+            const userRoleEntry = Object.entries(gameState.roleAssignments).find(([key, uid]) => uid === userId);
+            const userEntityId = userRoleEntry ? userRoleEntry[0] : null;
+            const userRoleType = userEntityId ? gameState.entities[userEntityId].type : 'Observer';
+            const hasAgentAuthority = userRoleType === 'Agent' || isGodMode;
+
+            if (!hasAgentAuthority) {
+                 document.getElementById('form-message').textContent = 'You must be the Agent or in God Mode to advance the turn.';
+                 return;
+            }
+            
+            const advanceBtn = document.getElementById('advance-turn-btn');
+            advanceBtn.disabled = true;
+            document.getElementById('form-message').textContent = 'Agent executing turn advancement...';
+
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const gameRef = doc(db, gameStatePath, 'game_state');
+                    const docSnap = await transaction.get(gameRef);
+                    if (!docSnap.exists()) { throw new Error("Game state not found!"); }
+                    
+                    const data = docSnap.data();
+
+                    if (data.phase === 'STAKING') {
+                        // PHASE 1: Move to Evaluation (Reward calculation and budget top-up happens here)
+                        data.phase = 'EVALUATION';
+                        document.getElementById('form-message').textContent = 'PHASE 1 COMPLETE: Rewards calculated and budgets updated. Review results, then advance turn again.';
+
+                        // Calculate and distribute rewards for the previous STAKING phase
+                        Object.entries(data.entities).forEach(([entityId, entity]) => {
+                            const V_identity = entity.V_identity;
+                            
+                            // Calculate total reward/loss pool for this entity (simplified pool based on total stake)
+                            let totalStakedOnEntity = entity.contributions.reduce((sum, c) => sum + c.stake, 0);
+                            let rewardPool = totalStakedOnEntity * 1.5; // Simple 150% reward pool multiplier
+
+                            // 1. Calculate weighted alignment score (R * stake) for each contribution
+                            const weightedScores = entity.contributions.map(c => {
+                                const R = calculateReward(V_identity, c.vector);
+                                return { contributorId: c.contributorId, score: R * c.stake, contribution: c };
+                            });
+
+                            const totalScore = weightedScores.reduce((sum, ws) => sum + ws.score, 0);
+
+                            // 2. Distribute rewards and update budgets (This is the "top up")
+                            weightedScores.forEach(ws => {
+                                const rewardAmount = totalScore > 0 ? (ws.score / totalScore) * rewardPool : 0;
+                                
+                                // Update user's budget, ensuring it's never undefined or null
+                                const currentBudget = data.budgets[ws.contributorId] !== undefined && data.budgets[ws.contributorId] !== null
+                                    ? data.budgets[ws.contributorId]
+                                    : DEFAULT_BUDGET;
+                                    
+                                data.budgets[ws.contributorId] = currentBudget + rewardAmount;
+                                
+                                // Store the final reward back into the contribution object for history logging
+                                ws.contribution.reward = parseFloat(rewardAmount.toFixed(2));
+                            });
+
+                            // Update the entity's contributions array with the final reward value
+                            entity.contributions = weightedScores.map(ws => ws.contribution);
+                        });
+                        
+                    } else if (data.phase === 'EVALUATION') {
+                        // PHASE 2: Move to STAKING, archive, and reset contributions
+                        
+                        // 1. Initialize history if needed
+                        if (!data.turnHistory) { data.turnHistory = {}; }
+                        
+                        const currentTurn = data.turn; // The turn that just ended
+                        const lastTurnData = {};
+                        
+                        // 2. Archive Contributions
+                        Object.keys(data.entities).forEach(entityId => {
+                            // Store the contributions and V_identity from the turn that just finished
+                            lastTurnData[entityId] = {
+                                contributions: data.entities[entityId].contributions,
+                                V_identity: data.entities[entityId].V_identity,
+                            };
+                            
+                            // 3. Reset the board for the new turn
+                            data.entities[entityId].contributions = [];
+                            data.entities[entityId].V_identity = Array(N_DIMENSION).fill(0);
+                        });
+                        
+                        // 4. Save the archived data to history
+                        data.turnHistory[currentTurn] = lastTurnData;
+
+                        // 5. Advance Turn Counter and Phase
+                        data.phase = 'STAKING';
+                        data.turn += 1;
+
+                        document.getElementById('form-message').textContent = `PHASE 2 COMPLETE: Turn ${data.turn} begins! Staking is now open.`;
+                    }
+
+                    transaction.set(gameRef, data);
+                });
+            } catch (e) {
+                console.error("Agent action failed: ", e);
+                document.getElementById('form-message').textContent = `Agent Error: ${e.message || "Could not advance turn."}`;
+            } finally {
+                // The onSnapshot listener handles re-rendering and re-enabling the button.
+            }
+        });
+
+
+        // --- START APPLICATION ---
+        window.onload = initializeFirebase;
+
+    </script>
+</body>
+</html>
